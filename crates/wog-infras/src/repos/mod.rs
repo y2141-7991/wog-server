@@ -1,17 +1,23 @@
+use std::sync::Arc;
+
+use async_trait::async_trait;
 use uuid::Uuid;
 
 use crate::{errors::DatabaseError, models::User};
 
 mod users;
 
-pub trait UserRepository: Send + Sync + Clone + 'static {
-    fn create(
+pub type DynUserRepository = Arc<dyn UserRepository + Send + Sync>;
+
+#[async_trait]
+pub trait UserRepository {
+    async fn create(
         &self,
         id: Uuid,
         username: &str,
         email: &str,
         hash_pwd: &str,
-    ) -> impl Future<Output = Result<User, DatabaseError>> + Send;
+    ) -> Result<User, DatabaseError>;
 
-    fn find_by_id(&self, id: Uuid) -> impl Future<Output = Result<Option<User>, DatabaseError>> + Send;
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, DatabaseError>;
 }

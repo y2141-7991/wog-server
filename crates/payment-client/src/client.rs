@@ -62,15 +62,26 @@ impl ClientStrategy for VietQRClient {
         let mut headers = HeaderMap::new();
         headers.insert("Content-Type", HeaderValue::from_static("application/json"));
 
-        let client_id = self.viet_qr_config.client_id.as_deref()
+        let client_id = self
+            .viet_qr_config
+            .client_id
+            .as_deref()
             .ok_or_else(|| ResponseError::ParseError("missing VIET_QR_CLIENT_ID".into()))?;
-        headers.insert("x-client-id", HeaderValue::from_str(client_id)
-            .map_err(|e| ResponseError::ParseError(e.to_string()))?);
+        headers.insert(
+            "x-client-id",
+            HeaderValue::from_str(client_id)
+                .map_err(|e| ResponseError::ParseError(e.to_string()))?,
+        );
 
-        let api_key = self.viet_qr_config.api_key.as_deref()
+        let api_key = self
+            .viet_qr_config
+            .api_key
+            .as_deref()
             .ok_or_else(|| ResponseError::ParseError("missing VIET_QR_API_KEY".into()))?;
-        headers.insert("x-api-key", HeaderValue::from_str(api_key)
-            .map_err(|e| ResponseError::ParseError(e.to_string()))?);
+        headers.insert(
+            "x-api-key",
+            HeaderValue::from_str(api_key).map_err(|e| ResponseError::ParseError(e.to_string()))?,
+        );
 
         Ok(headers)
     }
@@ -110,17 +121,31 @@ impl PaymentClient {
             strategy,
         }
     }
-    pub fn set_bank_account(account_no: &str,
+    pub fn set_bank_account(
+        account_no: &str,
         account_name: &str,
         acq_id: &str,
         add_info: &str,
-        amount: &str,) -> Self {
-            Self::new(Arc::new(VietQRClient::new(account_no, account_name, acq_id, add_info, amount)))
-        }
+        amount: &str,
+    ) -> Self {
+        Self::new(Arc::new(VietQRClient::new(
+            account_no,
+            account_name,
+            acq_id,
+            add_info,
+            amount,
+        )))
+    }
     pub async fn get_qr_code(&self) -> Result<VietQRResponse> {
         let headers = self.strategy.build_headers()?;
         let payload = self.strategy.build_payload();
-        let response = self.http.post(Self::VIET_QR_URL).headers(headers).json(&payload).send().await?;
+        let response = self
+            .http
+            .post(Self::VIET_QR_URL)
+            .headers(headers)
+            .json(&payload)
+            .send()
+            .await?;
 
         response.error_for_status_ref()?;
         let res = response.json::<VietQRResponse>().await?;
@@ -141,7 +166,7 @@ fn build_client() -> Client {
 pub struct VietQRResponse {
     pub code: String,
     pub desc: String,
-    pub data: VietQRData
+    pub data: VietQRData,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -149,7 +174,7 @@ pub struct VietQRResponse {
 pub struct VietQRData {
     pub qr_code: String,
     #[serde(rename = "qrDataURL")]
-    pub qr_data_url: String
+    pub qr_data_url: String,
 }
 
 #[derive(Error, Debug)]

@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use sqlx::PgPool;
 
 use crate::{errors::DatabaseError, models::User, repos::UserRepository};
@@ -7,6 +8,7 @@ struct PgUserRepo {
     pg_pool: PgPool,
 }
 
+#[async_trait]
 impl UserRepository for PgUserRepo {
     async fn create(
         &self,
@@ -36,12 +38,13 @@ impl UserRepository for PgUserRepo {
         })
     }
     async fn find_by_id(&self, id: uuid::Uuid) -> Result<Option<User>, DatabaseError> {
-        Ok(
-            sqlx::query_as::<_, User>(
-                r#"
+        Ok(sqlx::query_as::<_, User>(
+            r#"
                 SELECT * FROM users WHERE id = $1
-                "#
-            ).bind(id).fetch_optional(&self.pg_pool).await?
+                "#,
         )
+        .bind(id)
+        .fetch_optional(&self.pg_pool)
+        .await?)
     }
 }

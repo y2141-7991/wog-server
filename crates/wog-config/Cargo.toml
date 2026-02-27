@@ -1,0 +1,11 @@
+[package]
+name = "wog-config"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+wog-infras = { path = "../wog-infras" }
+
+
+uuid = { version = "1.21.0", features = ["v4", "serde"] }
+async-trait = "0.1.89"

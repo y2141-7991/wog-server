@@ -6,13 +6,13 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone, FromRow, Deserialize, Serialize)]
 pub struct User {
-    id: Uuid,
-    username: String,
-    email: String,
+    pub id: Uuid,
+    pub username: String,
+    pub email: String,
     #[serde(skip_serializing)]
     password: String,
-    avatar_url: String,
-    is_online: bool,
+    pub avatar_url: Option<String>,
+    pub is_online: bool,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
