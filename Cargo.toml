@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/payment-client",
     "crates/wog-api",
+    "crates/wog-config",
     "crates/wog-infras",
     "crates/wog-middleware",
     "crates/wog-oauth",
