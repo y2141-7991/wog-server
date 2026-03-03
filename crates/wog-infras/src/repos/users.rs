@@ -4,8 +4,14 @@ use sqlx::PgPool;
 use crate::{errors::DatabaseError, models::User, repos::UserRepository};
 
 #[derive(Clone)]
-struct PgUserRepo {
-    pg_pool: PgPool,
+pub struct PgUserRepo {
+    pub pg_pool: PgPool,
+}
+
+impl PgUserRepo {
+    pub fn new(pg_pool: PgPool) -> Self {
+        Self { pg_pool }
+    }
 }
 
 #[async_trait]

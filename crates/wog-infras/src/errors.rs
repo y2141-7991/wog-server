@@ -5,7 +5,7 @@ pub enum DatabaseError {
     #[error("Username or email already exists {0}")]
     ExistedDataError(String),
     #[error("The requested resource was not found in the database")]
-    NotFound(String),
+    ValueNotFound(String),
     #[error("A unique constraint violation occurred")]
     UniqueViolation,
     #[error("A check constraint violation occurred: {0}")]
@@ -24,7 +24,7 @@ impl From<sqlx::Error> for DatabaseError {
             sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed => {
                 DatabaseError::DatabaseConnectionError
             }
-            sqlx::Error::RowNotFound => DatabaseError::NotFound("Row not Found".into()),
+            sqlx::Error::RowNotFound => DatabaseError::ValueNotFound("Row not Found".into()),
             sqlx::Error::Database(db_err) => match db_err.code().as_deref() {
                 Some("23505") => DatabaseError::UniqueViolation,
                 Some("23514") => {

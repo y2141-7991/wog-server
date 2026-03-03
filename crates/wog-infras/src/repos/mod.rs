@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{errors::DatabaseError, models::User};
 
-mod users;
+pub mod users;
 
 pub type DynUserRepository = Arc<dyn UserRepository + Send + Sync>;
 
