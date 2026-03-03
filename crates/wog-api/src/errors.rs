@@ -2,7 +2,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use serde_json::{json, value};
+use serde_json::json;
 use wog_infras::errors::DatabaseError;
 
 #[derive(Debug, thiserror::Error)]
