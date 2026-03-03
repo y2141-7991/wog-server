@@ -10,7 +10,7 @@ pub struct User {
     pub username: String,
     pub email: String,
     #[serde(skip_serializing)]
-    password: String,
+    password: Option<String>,
     pub avatar_url: Option<String>,
     pub is_online: bool,
     created_at: DateTime<Utc>,

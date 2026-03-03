@@ -68,7 +68,7 @@ impl From<DatabaseError> for RestApiError {
             DatabaseError::UniqueViolation => {
                 RestApiError::Conflict("Resource already exists".into())
             }
-            _ => RestApiError::Database("Database Error".into()),
+            _ => RestApiError::Database(value.to_string()),
         }
     }
 }
