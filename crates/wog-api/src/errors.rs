@@ -2,8 +2,32 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use serde::Serialize;
 use serde_json::json;
+use utoipa::ToSchema;
 use wog_infras::errors::DatabaseError;
+
+#[derive(ToSchema, Serialize)]
+pub struct RestApiResponseError {
+    pub code: ErrorCode,
+    pub message: String,
+}
+
+#[derive(ToSchema, Serialize)]
+pub enum ErrorCode {
+    #[serde(rename = "BAD_REQUEST")]
+    BadRequest,
+    #[serde(rename = "NOT_FOUND")]
+    NotFound,
+    #[serde(rename = "CONFLICT")]
+    Conflict,
+    #[serde(rename = "FORBIDDEN")]
+    Forbidden,
+    #[serde(rename = "UNAUTHORIZED")]
+    Unauthorized,
+    #[serde(rename = "INTERNAL_SERVER_ERROR")]
+    InternalServerError,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum RestApiError {

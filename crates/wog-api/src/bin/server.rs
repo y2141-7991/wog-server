@@ -1,11 +1,16 @@
 use std::sync::Arc;
 
-use axum::{Router, routing::get};
+use axum::{Router, http, routing::get};
+use bytes::Bytes;
 use envconfig::Envconfig;
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::EnvFilter;
-use wog_config::config::AppConfig;
+use utoipa::{OpenApi, openapi};
+use utoipa_axum::router::OpenApiRouter;
+use utoipa_scalar::{Scalar, Servable};
+use wog_api::api_routes;
+use wog_config::{config::AppConfig, user::dto::UserResponse};
 use wog_infras::{repos::users::PgUserRepo, services::users::UserServices};
 use wog_middleware::AppState;
 
@@ -39,11 +44,23 @@ async fn main() -> anyhow::Result<()> {
         user_services,
     };
 
+    let (api_router, openapi) = OpenApiRouter::<AppState>::with_openapi(ApiDoc::openapi())
+        .merge(api_routes())
+        .split_for_parts();
+
+    let openapi_json: Bytes = openapi.to_json().expect("Failed to serialize OPENAPI").into();
     let app = Router::new()
-        .route(
-            "/api/v1/user/{id}",
-            get(wog_api::routers::user::get_profile),
-        )
+        .route("/api-docs/openapi.json", get({
+            let spec = openapi_json.clone();
+            || async move {
+                (
+                    [(http::header::CONTENT_TYPE, "application/json")],
+                    spec.clone(),
+                )
+            }
+        }))
+        .merge(Scalar::with_url("/scalar", openapi.clone()))
+        .merge(api_router)
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)
@@ -59,4 +76,32 @@ async fn main() -> anyhow::Result<()> {
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+#[derive(OpenApi)]
+#[openapi(
+    info(
+        title="",
+        version="",
+        description=""
+    ),
+    components(schemas(
+        UserResponse
+    )),
+    tags((name="", description="")),
+    modifiers(&SecurityAddon)
+)]
+struct ApiDoc;
+
+struct SecurityAddon;
+impl utoipa::Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let components = openapi.components.get_or_insert_with(Default::default);
+        components.add_security_scheme(
+            "bearer_auth",
+            utoipa::openapi::security::SecurityScheme::Http(utoipa::openapi::security::Http::new(
+                utoipa::openapi::security::HttpAuthScheme::Bearer,
+            )),
+        );
+    }
 }

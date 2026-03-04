@@ -1,8 +1,9 @@
 use serde::Serialize;
+use utoipa::ToSchema;
 use uuid::Uuid;
 use wog_infras::models::{User, UserProfile};
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct UserResponse {
     pub id: Uuid,
     pub email: String,
