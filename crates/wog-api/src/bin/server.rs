@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::{Router, http, routing::get};
+use axum::{Json, Router, http::{self, StatusCode}, routing::get};
 use bytes::Bytes;
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::EnvFilter;
@@ -46,6 +46,7 @@ async fn main() -> anyhow::Result<()> {
         .expect("Failed to serialize OPENAPI")
         .into();
     let app = Router::new()
+        .route("/", get(hello_world))
         .route(
             "/api-docs/openapi.json",
             get({
@@ -107,4 +108,9 @@ impl utoipa::Modify for SecurityAddon {
             )),
         );
     }
+}
+
+async fn hello_world() -> Result<(http::StatusCode, axum::Json<String>), http::StatusCode> {
+    tracing::info!("Healthcheck!!");
+    Ok((StatusCode::OK, Json("Hello world!!!".to_string())))
 }

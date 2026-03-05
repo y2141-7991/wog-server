@@ -238,9 +238,7 @@ impl OAuthService {
             .set_pkce_verifier(PkceCodeVerifier::new(pkce_code_verifier.to_owned()))
             .request_async(&ReqwestClient::from(self.http_client.clone()))
             .await
-            .context(OAuthServiceError::ProviderApi(
-                "Failed to exchange code".into(),
-            ))?;
+            .map_err(|e| OAuthServiceError::ProviderApi(format!("Token exchange failed: {}", e)))?;
         Ok(OAuthTokens::from(standard_token_response))
     }
 
@@ -253,9 +251,7 @@ impl OAuthService {
             .exchange_refresh_token(&RefreshToken::new(refresh_token.to_owned()))
             .request_async(&ReqwestClient::from(self.http_client.clone()))
             .await
-            .context(OAuthServiceError::ProviderApi(
-                "Failed to exchange code".into(),
-            ))?;
+            .map_err(|e| OAuthServiceError::ProviderApi(format!("Refresh token exchange failed: {}", e)))?;
         Ok(OAuthTokens::from(standard_token_response))
     }
 }

@@ -17,5 +17,5 @@ pub fn oauth_routes() -> Router<AppState> {
             "/api/v1/auth/oauth/google",
             get(google_login),
         )
-        .route("/api/v1/oauth-callback/google/callback", get(google_callback))
+        .route("/api/v1/auth/oauth/google/callback", get(google_callback))
 }
