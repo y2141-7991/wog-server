@@ -199,7 +199,10 @@ impl OAuthServices {
         }
     }
 
-    pub async fn fetch_user_info(&self, access_token: String) -> Result<GoogleUser, OauthServiceError> {
+    pub async fn fetch_user_info(
+        &self,
+        access_token: String,
+    ) -> Result<GoogleUser, OauthServiceError> {
         let url = self
             .oauth_config
             .user_info_url

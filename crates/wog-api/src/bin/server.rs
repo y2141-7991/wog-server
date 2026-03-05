@@ -2,18 +2,15 @@ use std::sync::Arc;
 
 use axum::{Router, http, routing::get};
 use bytes::Bytes;
-use envconfig::Envconfig;
-use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::EnvFilter;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_scalar::{Scalar, Servable};
 use wog_api::api_routes;
-use wog_config::{config::AppConfig, user::dto::UserResponse};
-use wog_infras::{repos::users::PgUserRepo, services::users::UserServices};
+use wog_config::user::dto::UserResponse;
+use wog_infras::{get_config, repos::users::PgUserRepo, services::users::UserServices};
 use wog_middleware::AppState;
-use wog_oauth::OAuthServices;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -24,28 +21,19 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    let app_config = AppConfig::init_from_env().expect("Env var not found");
-
-    tracing::info!("Connecting to PostgreSQL...");
-    let pool = PgPoolOptions::new()
-        .max_connections(20)
-        .connect(&app_config.database_url)
-        .await?;
+    let app_config = get_config().await?;
 
     tracing::info!("Running migrations...");
-    sqlx::migrate!("../../migrations").run(&pool).await?;
+    sqlx::migrate!("../../migrations")
+        .run(&app_config.pool)
+        .await?;
     tracing::info!("Migrations complete");
 
-    let user_repo = Arc::new(PgUserRepo::new(pool.clone()));
+    let user_repo = Arc::new(PgUserRepo::new(app_config.pool.clone()));
 
     let user_services = UserServices::new(user_repo);
-    let oauth_services = OAuthServices::new("google");
 
-    let app_state = AppState {
-        app_config: app_config.clone(),
-        user_services,
-        oauth_services
-    };
+    let app_state = AppState { user_services };
 
     let (api_router, openapi) = OpenApiRouter::<AppState>::with_openapi(ApiDoc::openapi())
         .merge(api_routes())
@@ -78,7 +66,10 @@ async fn main() -> anyhow::Result<()> {
         )
         .with_state(app_state);
 
-    let addr = format!("{}:{}", app_config.server_host, app_config.server_port);
+    let addr = format!(
+        "{}:{}",
+        app_config.default_config.server_host, app_config.default_config.server_port
+    );
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!("Listening on http://{}", listener.local_addr()?);

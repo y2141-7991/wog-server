@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::{errors::DatabaseError, models::User};
 
+pub mod oauth;
 pub mod users;
 
 pub type DynUserRepository = Arc<dyn UserRepository + Send + Sync>;
@@ -30,4 +31,9 @@ pub trait UserRepository {
         provider: &str,
         sub: &str,
     ) -> Result<User, DatabaseError>;
+}
+
+#[async_trait]
+pub trait OAuthRepository {
+    async fn oauth_authenticate_url(&self);
 }

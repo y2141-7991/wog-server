@@ -3706,19 +3706,21 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
+ "envconfig",
  "rust_decimal",
  "serde",
  "serde_json",
  "sqlx",
  "thiserror 2.0.18",
+ "tracing",
  "uuid",
+ "wog-oauth",
 ]
 
 [[package]]
 name = "wog-middleware"
 version = "0.1.0"
 dependencies = [
- "wog-config",
  "wog-infras",
  "wog-oauth",
 ]
