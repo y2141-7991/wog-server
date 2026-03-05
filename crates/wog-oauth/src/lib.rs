@@ -14,7 +14,7 @@ use reqwest::Client;
 use serde::Deserialize;
 
 #[derive(Debug, thiserror::Error)]
-pub enum OauthServiceError {
+pub enum OAuthServiceError {
     #[error("Provider api error: {0}")]
     ProviderApi(String),
     #[error("User email not verified")]
@@ -37,18 +37,18 @@ pub enum ResponseError {
     ParseError(String),
 }
 
-impl From<ResponseError> for OauthServiceError {
+impl From<ResponseError> for OAuthServiceError {
     fn from(value: ResponseError) -> Self {
         match value {
-            other => OauthServiceError::ParseError(other.to_string()),
+            other => OAuthServiceError::ParseError(other.to_string()),
         }
     }
 }
 
-impl From<anyhow::Error> for OauthServiceError {
+impl From<anyhow::Error> for OAuthServiceError {
     fn from(value: anyhow::Error) -> Self {
         match value {
-            other => OauthServiceError::ProviderApi(other.to_string()),
+            other => OAuthServiceError::ProviderApi(other.to_string()),
         }
     }
 }
@@ -115,9 +115,9 @@ pub struct OAuthConfig {
 
 #[derive(Debug)]
 pub struct AuthorizeUrl {
-    url: String,
-    crsf_token: String,
-    pkce_verifier: String,
+    pub url: String,
+    pub crsf_token: String,
+    pub pkce_verifier: String,
 }
 
 impl OAuthConfig {
@@ -146,7 +146,7 @@ pub fn http_client() -> Client {
 }
 
 #[derive(Debug, Clone)]
-pub struct OAuthServices {
+pub struct OAuthService {
     pub oauth_config: OAuthConfig,
     pub http_client: Client,
     pub oauth_client: OAuthBasicClient,
@@ -155,7 +155,7 @@ pub struct OAuthServices {
 pub type OAuthBasicClient =
     BasicClient<EndpointSet, EndpointNotSet, EndpointNotSet, EndpointNotSet, EndpointSet>;
 
-impl OAuthServices {
+impl OAuthService {
     pub fn new(provider: &str) -> Self {
         let env_var = EnvConf::init_from_env().expect("Env var not found");
         let config = OAuthConfig::new(provider, env_var).expect("Env var not found");
@@ -202,12 +202,12 @@ impl OAuthServices {
     pub async fn fetch_user_info(
         &self,
         access_token: String,
-    ) -> Result<GoogleUser, OauthServiceError> {
+    ) -> Result<GoogleUser, OAuthServiceError> {
         let url = self
             .oauth_config
             .user_info_url
             .as_ref()
-            .ok_or(OauthServiceError::UserInfoNotSupported)?;
+            .ok_or(OAuthServiceError::UserInfoNotSupported)?;
         let res = self
             .http_client
             .get(url)
@@ -218,10 +218,10 @@ impl OAuthServices {
             .send()
             .await
             .map_err(|e| {
-                OauthServiceError::ProviderApi(format!("Failed to fetch Google user: {}", e))
+                OAuthServiceError::ProviderApi(format!("Failed to fetch Google user: {}", e))
             })?;
         let oauth_user = res.json::<GoogleUser>().await.map_err(|e| {
-            OauthServiceError::ParseError(format!("Failed to parse Google user: {}", e))
+            OAuthServiceError::ParseError(format!("Failed to parse Google user: {}", e))
         })?;
 
         Ok(oauth_user)
@@ -231,14 +231,14 @@ impl OAuthServices {
         &self,
         auth_code: String,
         pkce_code_verifier: String,
-    ) -> Result<OAuthTokens, OauthServiceError> {
+    ) -> Result<OAuthTokens, OAuthServiceError> {
         let client = &self.oauth_client;
         let standard_token_response = client
             .exchange_code(AuthorizationCode::new(auth_code.to_owned()))
             .set_pkce_verifier(PkceCodeVerifier::new(pkce_code_verifier.to_owned()))
             .request_async(&ReqwestClient::from(self.http_client.clone()))
             .await
-            .context(OauthServiceError::ProviderApi(
+            .context(OAuthServiceError::ProviderApi(
                 "Failed to exchange code".into(),
             ))?;
         Ok(OAuthTokens::from(standard_token_response))
@@ -247,13 +247,13 @@ impl OAuthServices {
     pub async fn exchange_refresh_token(
         &self,
         refresh_token: String,
-    ) -> Result<OAuthTokens, OauthServiceError> {
+    ) -> Result<OAuthTokens, OAuthServiceError> {
         let client = &self.oauth_client;
         let standard_token_response = client
             .exchange_refresh_token(&RefreshToken::new(refresh_token.to_owned()))
             .request_async(&ReqwestClient::from(self.http_client.clone()))
             .await
-            .context(OauthServiceError::ProviderApi(
+            .context(OAuthServiceError::ProviderApi(
                 "Failed to exchange code".into(),
             ))?;
         Ok(OAuthTokens::from(standard_token_response))

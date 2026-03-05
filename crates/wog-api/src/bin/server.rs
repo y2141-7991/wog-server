@@ -7,9 +7,9 @@ use tracing_subscriber::EnvFilter;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_scalar::{Scalar, Servable};
-use wog_api::api_routes;
+use wog_api::{api_routes, routers::oauth_routes};
 use wog_config::user::dto::UserResponse;
-use wog_infras::{get_config, repos::users::PgUserRepo, services::users::UserServices};
+use wog_infras::{get_config, repos::{oauth::PgOAuthRepo, users::PgUserRepo}, services::{oauth::OAuthServices, users::UserServices}};
 use wog_middleware::AppState;
 
 #[tokio::main]
@@ -30,10 +30,12 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Migrations complete");
 
     let user_repo = Arc::new(PgUserRepo::new(app_config.pool.clone()));
+    let oauth_repo = Arc::new(PgOAuthRepo::new(app_config.pool.clone(), "google"));
 
     let user_services = UserServices::new(user_repo);
+    let oauth_services = OAuthServices::new(oauth_repo);
 
-    let app_state = AppState { user_services };
+    let app_state = AppState { user_services, oauth_services, app_config: app_config.clone() };
 
     let (api_router, openapi) = OpenApiRouter::<AppState>::with_openapi(ApiDoc::openapi())
         .merge(api_routes())
@@ -57,6 +59,7 @@ async fn main() -> anyhow::Result<()> {
             }),
         )
         .merge(Scalar::with_url("/scalar", openapi.clone()))
+        .merge(oauth_routes())
         .merge(api_router)
         .layer(
             CorsLayer::new()

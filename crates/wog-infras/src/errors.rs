@@ -1,3 +1,5 @@
+use wog_oauth::OAuthServiceError;
+
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum DatabaseError {
     #[error("An error occurred when obtaining database connection")]
@@ -14,6 +16,8 @@ pub enum DatabaseError {
     QueryGenerationFailed,
     #[error("A validation error occurred: {0}")]
     ValidationError(String),
+    #[error("OAuth failure: {0}")]
+    OauthError(String),
     #[error("An unknown error occurred: {0}")]
     Others(String),
 }
@@ -39,6 +43,15 @@ impl From<sqlx::Error> for DatabaseError {
             sqlx::Error::ColumnDecode { source, index } => {
                 DatabaseError::Others(format!("Decode error at column {index}: {source}"))
             }
+            other => DatabaseError::Others(other.to_string()),
+        }
+    }
+}
+
+impl From<OAuthServiceError> for DatabaseError {
+    fn from(value: OAuthServiceError) -> Self {
+        match value {
+            OAuthServiceError::ProviderApi(value) => DatabaseError::OauthError(value),
             other => DatabaseError::Others(other.to_string()),
         }
     }

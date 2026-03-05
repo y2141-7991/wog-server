@@ -17,3 +17,5 @@ thiserror = "2.0.18"
 uuid = { version = "1.21.0", features = ["v4", "serde"] }
 envconfig = "0.11.1"
 tracing = "0.1.44"
+tokio = "1.50.0"
+jsonwebtoken = "10.3.0"

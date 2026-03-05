@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::prelude::FromRow;
@@ -143,4 +143,12 @@ pub struct EventRegistration {
     pub status: String,
     pub registered_at: DateTime<Utc>,
     pub cancelled_at: Option<DateTime<Utc>>,
+}
+
+#[derive(FromRow)]
+pub struct OAuthVerifierRow {
+    pub id: Uuid,
+    pub csrf_token: String,
+    pub pkce_verifier: String,
+    pub created_at: DateTime<Utc>,
 }

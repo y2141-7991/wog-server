@@ -53,35 +53,5 @@ impl UserRepository for PgUserRepo {
         .fetch_optional(&self.pg_pool)
         .await?)
     }
-    async fn create_oauth_user(
-        &self,
-        id: uuid::Uuid,
-        email: &str,
-        username: &str,
-        avatar_url: &str,
-        provider: &str,
-        sub: &str,
-    ) -> Result<User, DatabaseError> {
-        sqlx::query_as::<_, User>(
-            r#"
-                INSERT INTO users (id, username, email, avatar_url, oauth_provider, oauth_sub)
-                VALUES ($1, $2, $3, $4, $5, $6)
-                RETURNING *
-            "#,
-        )
-        .bind(id)
-        .bind(username)
-        .bind(email)
-        .bind(avatar_url)
-        .bind(provider)
-        .bind(sub)
-        .fetch_one(&self.pg_pool)
-        .await
-        .map_err(|e| match e {
-            sqlx::Error::Database(ref db_err) if db_err.constraint().is_some() => {
-                DatabaseError::ExistedDataError("Username or email already exists".into())
-            }
-            _ => DatabaseError::Others(e.to_string()),
-        })
-    }
+    
 }

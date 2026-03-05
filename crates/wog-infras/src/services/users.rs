@@ -24,4 +24,5 @@ impl UserServices {
             .await?
             .ok_or_else(|| DatabaseError::ValueNotFound("User not found".into()))
     }
+    
 }
