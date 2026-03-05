@@ -6,13 +6,14 @@ use envconfig::Envconfig;
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::EnvFilter;
-use utoipa::{OpenApi, openapi};
+use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_scalar::{Scalar, Servable};
 use wog_api::api_routes;
 use wog_config::{config::AppConfig, user::dto::UserResponse};
 use wog_infras::{repos::users::PgUserRepo, services::users::UserServices};
 use wog_middleware::AppState;
+use wog_oauth::OAuthServices;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -38,27 +39,35 @@ async fn main() -> anyhow::Result<()> {
     let user_repo = Arc::new(PgUserRepo::new(pool.clone()));
 
     let user_services = UserServices::new(user_repo);
+    let oauth_services = OAuthServices::new("google");
 
     let app_state = AppState {
         app_config: app_config.clone(),
         user_services,
+        oauth_services
     };
 
     let (api_router, openapi) = OpenApiRouter::<AppState>::with_openapi(ApiDoc::openapi())
         .merge(api_routes())
         .split_for_parts();
 
-    let openapi_json: Bytes = openapi.to_json().expect("Failed to serialize OPENAPI").into();
+    let openapi_json: Bytes = openapi
+        .to_json()
+        .expect("Failed to serialize OPENAPI")
+        .into();
     let app = Router::new()
-        .route("/api-docs/openapi.json", get({
-            let spec = openapi_json.clone();
-            || async move {
-                (
-                    [(http::header::CONTENT_TYPE, "application/json")],
-                    spec.clone(),
-                )
-            }
-        }))
+        .route(
+            "/api-docs/openapi.json",
+            get({
+                let spec = openapi_json.clone();
+                || async move {
+                    (
+                        [(http::header::CONTENT_TYPE, "application/json")],
+                        spec.clone(),
+                    )
+                }
+            }),
+        )
         .merge(Scalar::with_url("/scalar", openapi.clone()))
         .merge(api_router)
         .layer(
@@ -81,14 +90,14 @@ async fn main() -> anyhow::Result<()> {
 #[derive(OpenApi)]
 #[openapi(
     info(
-        title="",
-        version="",
-        description=""
+        title="WoG Api",
+        version="0.1.0",
+        description="Application API"
     ),
     components(schemas(
         UserResponse
     )),
-    tags((name="", description="")),
+    tags((name="API", description="Application API")),
     modifiers(&SecurityAddon)
 )]
 struct ApiDoc;

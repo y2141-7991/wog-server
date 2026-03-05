@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 wog-infras = { path = "../wog-infras" }
 wog-config = { path = "../wog-config" }
+wog-oauth = { path = "../wog-oauth" }

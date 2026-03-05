@@ -4,16 +4,26 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Users
 -- ══════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS users (
-    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    username    VARCHAR(50)  NOT NULL UNIQUE,
-    email       VARCHAR(255) NOT NULL UNIQUE,
-    password    VARCHAR(255) NOT NULL,
-    avatar_url  TEXT,
-    is_online   BOOLEAN      NOT NULL DEFAULT FALSE,
-    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    username        VARCHAR(50)  NOT NULL UNIQUE,
+    email           VARCHAR(255) NOT NULL UNIQUE,
+    password        VARCHAR(255),
+    avatar_url      TEXT,
+    is_online       BOOLEAN      NOT NULL DEFAULT FALSE,
+    oauth_provider  VARCHAR(20),
+    oauth_sub       VARCHAR(255),
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
-
+-- ══════════════════════════════════════════════════════════════
+-- OAuth PKCE/CSRF Verifiers (short-lived, cleaned up after use)
+-- ══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS oauth_verifiers (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    csrf_token      TEXT NOT NULL UNIQUE,
+    pkce_verifier   TEXT NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 -- ══════════════════════════════════════════════════════════════
 -- Chat Rooms
 -- ══════════════════════════════════════════════════════════════
@@ -161,8 +171,12 @@ CREATE INDEX IF NOT EXISTS idx_reg_user         ON event_registrations(user_id);
 -- ══════════════════════════════════════════════════════════════
 -- Indexes
 -- ══════════════════════════════════════════════════════════════
+CREATE INDEX IF NOT EXISTS idx_users_email       ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_username    ON users(username);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oauth
+    ON users(oauth_provider, oauth_sub)
+    WHERE oauth_provider IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_messages_room     ON messages(room_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_sender   ON messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_room_members_user ON room_members(user_id);
-CREATE INDEX IF NOT EXISTS idx_users_email       ON users(email);
-CREATE INDEX IF NOT EXISTS idx_users_username    ON users(username);
