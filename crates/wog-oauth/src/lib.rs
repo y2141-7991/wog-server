@@ -97,8 +97,8 @@ pub struct EnvConf {
     google_client_id: String,
     #[envconfig(from = "GOOGLE_CLIENT_SECRET")]
     google_client_secret: String,
-    #[envconfig(from = "CLIENT_URL")]
-    client_url: String,
+    #[envconfig(from = "REST_API_URL")]
+    rest_api_url: String,
 }
 
 #[derive(Debug, Clone)]
@@ -129,7 +129,7 @@ impl OAuthConfig {
                 client_secret: env_conf.google_client_secret,
                 auth_url: "https://accounts.google.com/o/oauth2/v2/auth".to_owned(),
                 token_url: "https://oauth2.googleapis.com/token".to_string(),
-                redirect_url: format!("{}/api/v1/auth/oauth/google/callback", env_conf.client_url),
+                redirect_url: format!("{}/api/v1/auth/oauth/google/callback", env_conf.rest_api_url),
                 scopes: vec!["email".to_string(), "openid".to_string()],
                 user_info_url: Some("https://www.googleapis.com/oauth2/v3/userinfo".to_string()),
             }),
@@ -251,7 +251,9 @@ impl OAuthService {
             .exchange_refresh_token(&RefreshToken::new(refresh_token.to_owned()))
             .request_async(&ReqwestClient::from(self.http_client.clone()))
             .await
-            .map_err(|e| OAuthServiceError::ProviderApi(format!("Refresh token exchange failed: {}", e)))?;
+            .map_err(|e| {
+                OAuthServiceError::ProviderApi(format!("Refresh token exchange failed: {}", e))
+            })?;
         Ok(OAuthTokens::from(standard_token_response))
     }
 }

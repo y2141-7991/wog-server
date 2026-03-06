@@ -1,0 +1,44 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 80vh;
+  gap: 1.5rem;
+}
+
+.error {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+}
+
+.google-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  border-radius: 8px;
+  border: 1px solid #dadce0;
+  background: #fff;
+  color: #3c4043;
+  cursor: pointer;
+  transition: box-shadow 0.2s;
+}
+
+.google-btn:hover {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  border-color: #dadce0;
+}
+
+.profile {
+  text-align: center;
+}
+
+.user-id {
+  color: #888;
+  font-size: 0.875rem;
+  font-family: monospace;
+}

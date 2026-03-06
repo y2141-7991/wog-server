@@ -13,7 +13,6 @@ use uuid::Uuid;
 
 use crate::{errors::DatabaseError, models::User};
 
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
     pub sub: Uuid,
@@ -36,6 +35,8 @@ pub struct DefaultConfig {
     pub jwt_expiration_hours: i64,
     #[envconfig(from = "CLIENT_URL")]
     pub client_url: String,
+    #[envconfig(from = "REST_API_URL")]
+    pub rest_api_url: String,
 }
 
 #[derive(Clone)]

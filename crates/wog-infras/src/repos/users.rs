@@ -53,5 +53,4 @@ impl UserRepository for PgUserRepo {
         .fetch_optional(&self.pg_pool)
         .await?)
     }
-    
 }

@@ -6,7 +6,10 @@ use axum::{
 use axum_extra::extract::CookieJar;
 use jsonwebtoken::{DecodingKey, Validation, decode};
 use serde_json::json;
-use wog_infras::{AppConfig, Claims, services::{oauth::OAuthServices, users::UserServices}};
+use wog_infras::{
+    AppConfig, Claims,
+    services::{oauth::OAuthServices, users::UserServices},
+};
 
 #[derive(Clone)]
 pub struct AppState {

@@ -3,7 +3,11 @@ use chrono::Utc;
 use sqlx::PgPool;
 use wog_oauth::{GoogleUser, OAuthService, OAuthServiceError, OAuthTokens};
 
-use crate::{errors::DatabaseError, models::{OAuthVerifierRow, User}, repos::OAuthRepository};
+use crate::{
+    errors::DatabaseError,
+    models::{OAuthVerifierRow, User},
+    repos::OAuthRepository,
+};
 
 pub struct OAuthConnection {
     pub user: GoogleUser,

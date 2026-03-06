@@ -1,8 +1,10 @@
 use uuid::Uuid;
 
-use crate::{errors::DatabaseError, models::User, repos::{DynOAuthRepository, OAuthRepository, oauth::OAuthConnection}};
-
-
+use crate::{
+    errors::DatabaseError,
+    models::User,
+    repos::{DynOAuthRepository, OAuthRepository, oauth::OAuthConnection},
+};
 
 #[derive(Clone)]
 pub struct OAuthServices {
@@ -19,13 +21,19 @@ impl OAuthServices {
     pub async fn auth_url(&self) -> Result<String, DatabaseError> {
         Ok(self.oauth_repo.oauth_auth_url().await?)
     }
-    async fn exchange_code(&self, code: String, csrf: String) -> Result<OAuthConnection, DatabaseError> {
+    async fn exchange_code(
+        &self,
+        code: String,
+        csrf: String,
+    ) -> Result<OAuthConnection, DatabaseError> {
         Ok(self.oauth_repo.exchange_code(code, csrf).await?)
     }
-    async fn find_by_oauth(&self, provider: &str, sub: &str) -> Result<Option<User>, DatabaseError> {
-        self.oauth_repo
-            .find_by_oauth(provider, sub)
-            .await
+    async fn find_by_oauth(
+        &self,
+        provider: &str,
+        sub: &str,
+    ) -> Result<Option<User>, DatabaseError> {
+        self.oauth_repo.find_by_oauth(provider, sub).await
     }
     async fn create_oauth_user(
         &self,
@@ -52,21 +60,26 @@ impl OAuthServices {
             Some(existing) => existing,
             _ => {
                 let google_user = oauth.user;
-                let username = google_user.name
-                    .unwrap_or_else(|| google_user.email.split('@').next().unwrap_or("user").to_string());
+                let username = google_user.name.unwrap_or_else(|| {
+                    google_user
+                        .email
+                        .split('@')
+                        .next()
+                        .unwrap_or("user")
+                        .to_string()
+                });
 
                 self.create_oauth_user(
-                        Uuid::new_v4(),
-                        &google_user.email,
-                        &username,
-                        google_user.picture.as_deref().unwrap_or(""),
-                        "google",
-                        &google_user.sub,
-                    ).await?
-                
+                    Uuid::new_v4(),
+                    &google_user.email,
+                    &username,
+                    google_user.picture.as_deref().unwrap_or(""),
+                    "google",
+                    &google_user.sub,
+                )
+                .await?
             }
         };
         Ok(user)
     }
-
 }
