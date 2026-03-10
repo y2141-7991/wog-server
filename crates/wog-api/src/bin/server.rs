@@ -15,8 +15,8 @@ use wog_api::{api_routes, routers::oauth_routes};
 use wog_config::user::dto::UserResponse;
 use wog_infras::{
     get_config,
-    repos::{oauth::PgOAuthRepo, users::PgUserRepo},
-    services::{oauth::OAuthServices, users::UserServices},
+    repos::{events::PgEventRepo, oauth::PgOAuthRepo, users::PgUserRepo},
+    services::{events::EventServices, oauth::OAuthServices, users::UserServices},
 };
 use wog_middleware::AppState;
 
@@ -37,16 +37,19 @@ async fn main() -> anyhow::Result<()> {
         .await?;
     tracing::info!("Migrations complete");
 
+    let event_repo = Arc::new(PgEventRepo::new(app_config.pool.clone()));
     let user_repo = Arc::new(PgUserRepo::new(app_config.pool.clone()));
     let oauth_repo = Arc::new(PgOAuthRepo::new(app_config.pool.clone(), "google"));
 
     let user_services = UserServices::new(user_repo);
     let oauth_services = OAuthServices::new(oauth_repo);
+    let event_services = EventServices::new(event_repo);
 
     let app_state = AppState {
         user_services,
         oauth_services,
         app_config: app_config.clone(),
+        event_services,
     };
 
     let (api_router, openapi) = OpenApiRouter::<AppState>::with_openapi(ApiDoc::openapi())

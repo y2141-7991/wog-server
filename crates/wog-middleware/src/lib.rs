@@ -8,7 +8,7 @@ use jsonwebtoken::{DecodingKey, Validation, decode};
 use serde_json::json;
 use wog_infras::{
     AppConfig, Claims,
-    services::{oauth::OAuthServices, users::UserServices},
+    services::{events::EventServices, oauth::OAuthServices, users::UserServices},
 };
 
 #[derive(Clone)]
@@ -16,6 +16,7 @@ pub struct AppState {
     pub user_services: UserServices,
     pub app_config: AppConfig,
     pub oauth_services: OAuthServices,
+    pub event_services: EventServices,
 }
 
 pub struct AuthClaims(pub Claims);

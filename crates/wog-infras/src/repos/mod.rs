@@ -3,13 +3,19 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use crate::{errors::DatabaseError, models::User, repos::oauth::OAuthConnection};
+use crate::{
+    errors::DatabaseError,
+    models::{Event, EventNew, User},
+    repos::oauth::OAuthConnection,
+};
 
+pub mod events;
 pub mod oauth;
 pub mod users;
 
 pub type DynUserRepository = Arc<dyn UserRepository + Send + Sync>;
 pub type DynOAuthRepository = Arc<dyn OAuthRepository + Send + Sync>;
+pub type DynEventRepository = Arc<dyn EventRepository + Send + Sync>;
 
 #[async_trait]
 pub trait UserRepository {
@@ -45,4 +51,17 @@ pub trait OAuthRepository {
         provider: &str,
         sub: &str,
     ) -> Result<User, DatabaseError>;
+}
+
+#[async_trait]
+pub trait EventRepository {
+    async fn create_event(&self, event: EventNew) -> Result<Event, DatabaseError>;
+
+    async fn update_event(&self, event: Event) -> Result<(), DatabaseError>;
+
+    async fn delete_event(&self, id: Uuid);
+
+    async fn find_event_by_id(&self, id: Uuid) -> Result<Event, DatabaseError>;
+
+    async fn list_events(&self, id: Uuid) -> Result<Vec<Event>, DatabaseError>;
 }

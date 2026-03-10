@@ -1,3 +1,4 @@
+/* Layout */
 .container {
   display: flex;
   flex-direction: column;
@@ -7,6 +8,138 @@
   gap: 1.5rem;
 }
 
+.page {
+  max-width: 600px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+/* Navbar */
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.navbar-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.navbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.create-event-btn {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  border-radius: 20px;
+  border: 1px solid transparent;
+  background: #646cff;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.create-event-btn:hover {
+  background: #535bf2;
+}
+
+/* Avatar menu */
+.avatar-menu {
+  position: relative;
+}
+
+.avatar-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+  background: #535bf2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-fallback {
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.avatar-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  background: #2a2a2a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  min-width: 240px;
+  padding: 0.75rem;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.dropdown-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.25rem;
+}
+
+.dropdown-header img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.dropdown-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.dropdown-email {
+  color: #888;
+  font-size: 0.8rem;
+}
+
+.avatar-dropdown hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 0.5rem 0;
+}
+
+.dropdown-item {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: inherit;
+}
+
+.dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: transparent;
+}
+
+/* Error */
 .error {
   color: #ef4444;
   background: rgba(239, 68, 68, 0.1);
@@ -14,6 +147,7 @@
   border-radius: 8px;
 }
 
+/* Google button */
 .google-btn {
   display: flex;
   align-items: center;
@@ -33,12 +167,114 @@
   border-color: #dadce0;
 }
 
+/* Profile */
 .profile {
   text-align: center;
+}
+
+.profile img {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
 }
 
 .user-id {
   color: #888;
   font-size: 0.875rem;
   font-family: monospace;
+}
+
+/* Form */
+.form-card {
+  background: #2a2a2a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+.form-card h2 {
+  margin: 0 0 1rem;
+}
+
+.form-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.form-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  color: #aaa;
+}
+
+.form-card input,
+.form-card textarea,
+.form-card select {
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #1a1a1a;
+  color: inherit;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.form-card input:focus,
+.form-card textarea:focus,
+.form-card select:focus {
+  outline: none;
+  border-color: #646cff;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: inherit;
+}
+
+.btn-secondary:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+@media (prefers-color-scheme: light) {
+  .navbar {
+    border-bottom-color: rgba(0, 0, 0, 0.1);
+  }
+  .avatar-dropdown {
+    background: #fff;
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+  .avatar-dropdown hr {
+    border-top-color: rgba(0, 0, 0, 0.1);
+  }
+  .dropdown-item:hover {
+    background: rgba(0, 0, 0, 0.05);
+  }
+  .form-card {
+    background: #fff;
+    border-color: rgba(0, 0, 0, 0.1);
+  }
+  .form-card input,
+  .form-card textarea,
+  .form-card select {
+    background: #f9f9f9;
+    border-color: rgba(0, 0, 0, 0.15);
+  }
 }

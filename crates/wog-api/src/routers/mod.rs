@@ -5,8 +5,11 @@ use axum::{
 use utoipa_axum::{router::OpenApiRouter, routes};
 use wog_middleware::AppState;
 
-use crate::routers::oauth::{auth_me, google_callback, google_login, logout};
+use crate::routers::{
+    oauth::{auth_me, google_callback, google_login, logout},
+};
 
+pub mod event;
 pub mod oauth;
 pub mod user;
 
@@ -20,4 +23,8 @@ pub fn oauth_routes() -> Router<AppState> {
         .route("/api/v1/auth/oauth/google/callback", get(google_callback))
         .route("/api/v1/auth/me", get(auth_me))
         .route("/api/v1/auth/logout", post(logout))
+}
+
+pub fn event_routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new().routes(routes!(event::create_event))
 }

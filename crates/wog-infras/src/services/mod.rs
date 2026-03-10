@@ -1,2 +1,3 @@
+pub mod events;
 pub mod oauth;
 pub mod users;

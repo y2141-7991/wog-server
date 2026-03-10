@@ -133,6 +133,20 @@ pub struct Event {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Clone)]
+pub struct EventNew {
+    pub title: String,
+    pub description: Option<String>,
+    pub organizer_id: Uuid,
+    pub price: Decimal,
+    pub capacity: i32,
+    pub registered_count: i32,
+    pub status: String,
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
+    pub location: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct EventRegistration {
     pub id: Uuid,

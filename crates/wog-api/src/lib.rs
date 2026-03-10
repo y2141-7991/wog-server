@@ -7,5 +7,5 @@ use routers::*;
 use wog_middleware::AppState;
 
 pub fn api_routes() -> OpenApiRouter<AppState> {
-    OpenApiRouter::new().merge(user_routes())
+    OpenApiRouter::new().merge(user_routes().merge(event_routes()))
 }

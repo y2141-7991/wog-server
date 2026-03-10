@@ -10,6 +10,7 @@ export function ProfilePage({ user, onLogout }: ProfilePageProps) {
     <div className="container">
       <div className="profile">
         <h1>Welcome, {user.username}</h1>
+        {user.avatar_url && <img src={user.avatar_url} alt={user.username} />}
         <p className="user-id">ID: {user.id}</p>
         <button onClick={onLogout}>Sign out</button>
       </div>

@@ -129,7 +129,10 @@ impl OAuthConfig {
                 client_secret: env_conf.google_client_secret,
                 auth_url: "https://accounts.google.com/o/oauth2/v2/auth".to_owned(),
                 token_url: "https://oauth2.googleapis.com/token".to_string(),
-                redirect_url: format!("{}/api/v1/auth/oauth/google/callback", env_conf.rest_api_url),
+                redirect_url: format!(
+                    "{}/api/v1/auth/oauth/google/callback",
+                    env_conf.rest_api_url
+                ),
                 scopes: vec!["email".to_string(), "openid".to_string()],
                 user_info_url: Some("https://www.googleapis.com/oauth2/v3/userinfo".to_string()),
             }),

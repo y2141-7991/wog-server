@@ -7,7 +7,10 @@ use axum::{
     response::{IntoResponse, Redirect},
 };
 use serde_json::json;
+use wog_config::user::dto::UserResponse;
 use wog_middleware::{AppState, AuthClaims};
+
+use crate::errors::RestApiError;
 
 pub async fn google_login(State(state): State<AppState>) -> Result<Redirect, Redirect> {
     let error_redirect = format!(
@@ -66,8 +69,12 @@ pub async fn google_callback(
     Ok(response)
 }
 
-pub async fn auth_me(AuthClaims(claims): AuthClaims) -> Json<serde_json::Value> {
-    Json(json!({ "id": claims.sub, "username": claims.username }))
+pub async fn auth_me(
+    State(state): State<AppState>,
+    AuthClaims(claims): AuthClaims,
+) -> Result<Json<UserResponse>, RestApiError> {
+    let user = state.user_services.get_user(claims.sub).await?;
+    Ok(Json(user.into()))
 }
 
 pub async fn logout() -> impl IntoResponse {
