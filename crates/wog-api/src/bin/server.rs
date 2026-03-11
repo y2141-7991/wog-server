@@ -6,8 +6,8 @@ use axum::{
     routing::get,
 };
 use bytes::Bytes;
-use tower_http::cors::{Any, CorsLayer};
-use tracing_subscriber::EnvFilter;
+use tower_http::{cors::{Any, CorsLayer}, trace::TraceLayer};
+use tracing_subscriber::{EnvFilter, fmt};
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_scalar::{Scalar, Servable};
@@ -22,12 +22,17 @@ use wog_middleware::AppState;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("info,chatbox=debug")),
-        )
-        .init();
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info,wog_api=debug,wog_infras=debug"));
+
+    if std::env::var("LOG_FORMAT").as_deref() == Ok("json") {
+        fmt().json().with_env_filter(env_filter).init();
+    } else {
+        fmt()
+            .with_env_filter(env_filter)
+            .with_target(true)
+            .init();
+    };
 
     let app_config = get_config().await?;
 
@@ -77,6 +82,7 @@ async fn main() -> anyhow::Result<()> {
         .merge(Scalar::with_url("/scalar", openapi.clone()))
         .merge(oauth_routes())
         .merge(api_router)
+        .layer(TraceLayer::new_for_http())
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)

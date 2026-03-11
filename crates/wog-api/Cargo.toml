@@ -17,7 +17,7 @@ sqlx = { version = "0.8.6", features = ["runtime-tokio", "tls-rustls", "postgres
 tracing = "0.1.44"
 tokio = { version = "1.49.0", features = ["full"] }
 anyhow = "1.0.102"
-tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.22", features = ["env-filter", "json"] }
 tracing-log = "0.2.0"
 envconfig = "0.11.1"
 tower = { version = "0.5", features = ["full"] }

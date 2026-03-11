@@ -63,5 +63,5 @@ pub trait EventRepository {
 
     async fn find_event_by_id(&self, id: Uuid) -> Result<Event, DatabaseError>;
 
-    async fn list_events(&self, id: Uuid) -> Result<Vec<Event>, DatabaseError>;
+    async fn find_list_events_by_current_id(&self, id: Uuid) -> Result<Vec<Event>, DatabaseError>;
 }

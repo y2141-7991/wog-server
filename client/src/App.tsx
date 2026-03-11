@@ -3,7 +3,7 @@ import './App.css'
 import { useAuth } from './hooks/useAuth'
 import { Navbar } from './components/Navbar'
 import { LoginPage } from './pages/LoginPage'
-import { ProfilePage } from './pages/ProfilePage'
+import { HomePage } from './pages/HomePage'
 import { CreateEventPage } from './pages/CreateEventPage'
 
 type Page = 'home' | 'create-event'
@@ -22,13 +22,9 @@ function App() {
 
   return (
     <>
-      <Navbar
-        user={user}
-        onLogout={logout}
-        onCreateEvent={() => setPage('create-event')}
-      />
+      <Navbar user={user} onLogout={logout} />
       <main>
-        {page === 'home' && <ProfilePage user={user} onLogout={logout} />}
+        {page === 'home' && <HomePage onCreateEvent={() => setPage('create-event')} />}
         {page === 'create-event' && <CreateEventPage onBack={() => setPage('home')} />}
       </main>
     </>

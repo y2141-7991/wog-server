@@ -31,6 +31,10 @@ pub struct EventResponse {
     pub end_time: DateTime<Utc>,
     pub location: Option<String>,
 }
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct EventListResponse {
+    pub data: Vec<EventResponse>,
+}
 
 impl From<Event> for EventResponse {
     fn from(value: Event) -> Self {

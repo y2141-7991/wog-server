@@ -1,9 +1,16 @@
 import type { EventCreateRequest, EventResponse } from '../types'
 
-const EVENT_URL = '/api/v1/event'
+const EVENTS_URL = '/api/v1/events'
+
+export async function fetchEvents(): Promise<EventResponse[]> {
+  const res = await fetch(EVENTS_URL)
+  if (!res.ok) return []
+  const json = await res.json()
+  return json.data
+}
 
 export async function createEvent(data: EventCreateRequest): Promise<EventResponse> {
-  const res = await fetch(EVENT_URL, {
+  const res = await fetch(EVENTS_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),

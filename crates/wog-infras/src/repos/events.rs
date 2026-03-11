@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     errors::DatabaseError,
-    models::{Event, EventNew, User},
+    models::{Event, EventNew},
     repos::EventRepository,
 };
 
@@ -62,7 +62,7 @@ impl EventRepository for PgEventRepo {
         .fetch_one(&self.pg_pool)
         .await?)
     }
-    async fn list_events(&self, id: Uuid) -> Result<Vec<Event>, DatabaseError> {
+    async fn find_list_events_by_current_id(&self, id: Uuid) -> Result<Vec<Event>, DatabaseError> {
         let events = sqlx::query_as::<_, Event>(
             r#"
                 SELECT * FROM events WHERE organizer_id = $1

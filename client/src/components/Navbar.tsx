@@ -4,10 +4,9 @@ import type { User } from '../types'
 interface NavbarProps {
   user: User
   onLogout: () => void
-  onCreateEvent: () => void
 }
 
-export function Navbar({ user, onLogout, onCreateEvent }: NavbarProps) {
+export function Navbar({ user, onLogout }: NavbarProps) {
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -25,9 +24,6 @@ export function Navbar({ user, onLogout, onCreateEvent }: NavbarProps) {
     <nav className="navbar">
       <span className="navbar-title">WoG</span>
       <div className="navbar-right">
-        <button className="create-event-btn" onClick={onCreateEvent}>
-          + Create Event
-        </button>
         <div className="avatar-menu" ref={menuRef}>
           <button className="avatar-btn" onClick={() => setOpen(!open)}>
             {user.avatar_url ? (
