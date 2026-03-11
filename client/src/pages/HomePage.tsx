@@ -4,9 +4,10 @@ import type { EventResponse } from '../types'
 
 interface HomePageProps {
   onCreateEvent: () => void
+  onEditEvent: (event: EventResponse) => void
 }
 
-export function HomePage({ onCreateEvent }: HomePageProps) {
+export function HomePage({ onCreateEvent, onEditEvent }: HomePageProps) {
   const [events, setEvents] = useState<EventResponse[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -48,6 +49,9 @@ export function HomePage({ onCreateEvent }: HomePageProps) {
                 <span>{new Date(event.start_time).toLocaleDateString()}</span>
                 <span>{event.registered_count} / {event.capacity}</span>
                 <span>${Number(event.price).toFixed(2)}</span>
+              </div>
+              <div className="event-actions">
+                <button className="btn-secondary btn-sm" onClick={() => onEditEvent(event)}>Edit</button>
               </div>
             </div>
           ))}

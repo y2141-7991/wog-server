@@ -1,6 +1,11 @@
-use axum::{Json, extract::State};
+use axum::{
+    Json,
+    extract::{Path, State},
+};
+use uuid::Uuid;
 use wog_config::event::dto::{
-    EventCreateRequest, EventListResponse, EventResponse, mapping_from_req_to_domain,
+    EventCreateRequest, EventListResponse, EventResponse, create_from_req_to_domain,
+    update_from_req_to_domain,
 };
 use wog_middleware::{AppState, AuthClaims};
 
@@ -26,7 +31,7 @@ pub async fn create_event(
 ) -> Result<Json<EventResponse>, RestApiError> {
     let event = state
         .event_services
-        .create_new_event(mapping_from_req_to_domain(_claims.sub, payload))
+        .create_new_event(create_from_req_to_domain(_claims.sub, payload))
         .await?;
     Ok(Json(event.into()))
 }
@@ -56,4 +61,29 @@ pub async fn get_events_current_id(
         .map(|e| e.into())
         .collect::<Vec<EventResponse>>();
     Ok(Json(EventListResponse { data: items }))
+}
+
+#[utoipa::path(
+    patch,
+    path = "/api/v1/events/{id}",
+    tag = "Event",
+    responses(
+        (status = 200, description = "Update events", body = EventResponse), 
+        (status = 401, description = "Unauthorized", body = RestApiResponseError),
+        (status = 500, description = "Internal error", body = RestApiResponseError),
+    ),
+    security(("bearer_auth" = []))
+)]
+#[axum::debug_handler]
+pub async fn update_event(
+    State(state): State<AppState>,
+    AuthClaims(_claims): AuthClaims,
+    Path(event_id): Path<Uuid>,
+    Json(payload): Json<EventCreateRequest>,
+) -> Result<Json<EventResponse>, RestApiError> {
+    let event = state
+        .event_services
+        .update_event(update_from_req_to_domain(payload), event_id)
+        .await?;
+    Ok(Json(event.into()))
 }

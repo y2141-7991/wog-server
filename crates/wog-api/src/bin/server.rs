@@ -6,7 +6,10 @@ use axum::{
     routing::get,
 };
 use bytes::Bytes;
-use tower_http::{cors::{Any, CorsLayer}, trace::TraceLayer};
+use tower_http::{
+    cors::{Any, CorsLayer},
+    trace::TraceLayer,
+};
 use tracing_subscriber::{EnvFilter, fmt};
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
@@ -28,10 +31,7 @@ async fn main() -> anyhow::Result<()> {
     if std::env::var("LOG_FORMAT").as_deref() == Ok("json") {
         fmt().json().with_env_filter(env_filter).init();
     } else {
-        fmt()
-            .with_env_filter(env_filter)
-            .with_target(true)
-            .init();
+        fmt().with_env_filter(env_filter).with_target(true).init();
     };
 
     let app_config = get_config().await?;

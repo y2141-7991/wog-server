@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     errors::DatabaseError,
-    models::{Event, EventNew, User},
+    models::{Event, EventNew, EventUpdate, User},
     repos::oauth::OAuthConnection,
 };
 
@@ -57,7 +57,11 @@ pub trait OAuthRepository {
 pub trait EventRepository {
     async fn create_event(&self, event: EventNew) -> Result<Event, DatabaseError>;
 
-    async fn update_event(&self, event: Event) -> Result<(), DatabaseError>;
+    async fn update_event(
+        &self,
+        event: EventUpdate,
+        event_id: Uuid,
+    ) -> Result<Event, DatabaseError>;
 
     async fn delete_event(&self, id: Uuid);
 

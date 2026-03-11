@@ -3,7 +3,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
-use wog_infras::models::{Event, EventNew};
+use wog_infras::models::{Event, EventNew, EventUpdate};
 
 #[derive(Deserialize, Serialize, ToSchema)]
 pub struct EventCreateRequest {
@@ -54,7 +54,7 @@ impl From<Event> for EventResponse {
     }
 }
 
-pub fn mapping_from_req_to_domain(creator_id: Uuid, event: EventCreateRequest) -> EventNew {
+pub fn create_from_req_to_domain(creator_id: Uuid, event: EventCreateRequest) -> EventNew {
     EventNew {
         title: event.title,
         description: event.description,
@@ -62,6 +62,19 @@ pub fn mapping_from_req_to_domain(creator_id: Uuid, event: EventCreateRequest) -
         price: event.price,
         capacity: event.capacity,
         registered_count: 0,
+        status: event.status,
+        start_time: event.start_time,
+        end_time: event.end_time,
+        location: event.location,
+    }
+}
+
+pub fn update_from_req_to_domain(event: EventCreateRequest) -> EventUpdate {
+    EventUpdate {
+        title: event.title,
+        description: event.description,
+        price: event.price,
+        capacity: event.capacity,
         status: event.status,
         start_time: event.start_time,
         end_time: event.end_time,

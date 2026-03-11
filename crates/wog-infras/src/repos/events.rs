@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     errors::DatabaseError,
-    models::{Event, EventNew},
+    models::{Event, EventNew, EventUpdate},
     repos::EventRepository,
 };
 
@@ -39,17 +39,35 @@ impl EventRepository for PgEventRepo {
         .await?;
         Ok(event)
     }
-    async fn update_event(&self, event: Event) -> Result<(), DatabaseError> {
-        sqlx::query(
-            r#"
-            UPDATE events SET title = $1
-
+    async fn update_event(
+        &self,
+        event: EventUpdate,
+        event_id: Uuid,
+    ) -> Result<Event, DatabaseError> {
+        Ok(sqlx::query_as::<_, Event>(
+        r#"
+            UPDATE events SET 
+                title = $1,
+                description = $2,
+                price = $3,
+                capacity = $4,
+                status = $5,
+                start_time = $6,
+                end_time = $7
+            WHERE id = $8
+            RETURNING *
         "#,
         )
         .bind(event.title)
-        .execute(&self.pg_pool)
-        .await?;
-        Ok(())
+        .bind(event.description)
+        .bind(event.price)
+        .bind(event.capacity)
+        .bind(event.status)
+        .bind(event.start_time)
+        .bind(event.end_time)
+        .bind(event_id)
+        .fetch_one(&self.pg_pool)
+        .await?)
     }
     async fn delete_event(&self, id: Uuid) {}
     async fn find_event_by_id(&self, id: Uuid) -> Result<Event, DatabaseError> {
@@ -65,7 +83,7 @@ impl EventRepository for PgEventRepo {
     async fn find_list_events_by_current_id(&self, id: Uuid) -> Result<Vec<Event>, DatabaseError> {
         let events = sqlx::query_as::<_, Event>(
             r#"
-                SELECT * FROM events WHERE organizer_id = $1
+                SELECT * FROM events ORDER BY created_at DESC
             "#,
         )
         .bind(id)

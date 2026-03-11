@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use crate::{
     errors::DatabaseError,
-    models::{Event, EventNew},
+    models::{Event, EventNew, EventUpdate},
     repos::{DynEventRepository, EventRepository},
 };
 
@@ -23,5 +23,12 @@ impl EventServices {
     }
     pub async fn find_events_by_current_id(&self, id: Uuid) -> Result<Vec<Event>, DatabaseError> {
         Ok(self.event_repo.find_list_events_by_current_id(id).await?)
+    }
+    pub async fn update_event(
+        &self,
+        event: EventUpdate,
+        event_id: Uuid,
+    ) -> Result<Event, DatabaseError> {
+        Ok(self.event_repo.update_event(event, event_id).await?)
     }
 }

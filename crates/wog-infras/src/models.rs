@@ -147,6 +147,18 @@ pub struct EventNew {
     pub location: Option<String>,
 }
 
+#[derive(Clone)]
+pub struct EventUpdate {
+    pub title: String,
+    pub description: Option<String>,
+    pub price: Decimal,
+    pub capacity: i32,
+    pub status: String,
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
+    pub location: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct EventRegistration {
     pub id: Uuid,
