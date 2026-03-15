@@ -26,6 +26,6 @@ pub fn oauth_routes() -> Router<AppState> {
 pub fn event_routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(event::create_event))
-        .routes(routes!(event::get_events_current_id))
+        .routes(routes!(event::get_events))
         .routes(routes!(event::update_event))
 }

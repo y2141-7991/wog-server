@@ -2,13 +2,11 @@ FROM rust:bookworm AS builder
 
 WORKDIR /app
 
-# Cache dependencies: copy manifests first, build a dummy to populate the cache
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 RUN find crates -name "*.rs" -exec sh -c 'echo "fn main(){}" > "$1"' _ {} \;
 RUN cargo build --release 2>/dev/null || true
 
-# Copy real source and rebuild (only changed crates recompile)
 COPY crates/ crates/
 COPY migrations/ migrations/
 

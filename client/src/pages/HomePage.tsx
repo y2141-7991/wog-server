@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchEvents } from '../api/event'
 import type { EventResponse } from '../types'
 
@@ -7,15 +7,39 @@ interface HomePageProps {
   onEditEvent: (event: EventResponse) => void
 }
 
+interface CachedPage {
+  data: EventResponse[]
+  hasMore: boolean
+}
+
 export function HomePage({ onCreateEvent, onEditEvent }: HomePageProps) {
-  const [events, setEvents] = useState<EventResponse[]>([])
+  const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [currentData, setCurrentData] = useState<CachedPage>({ data: [], hasMore: false })
+  const cache = useRef<Map<number, CachedPage>>(new Map())
+
+  const loadPage = useCallback((p: number) => {
+    const cached = cache.current.get(p)
+    if (cached) {
+      setCurrentData(cached)
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
+    fetchEvents(p).then((res) => {
+      const entry = { data: res.data, hasMore: res.pagination_meta.has_more }
+      cache.current.set(p, entry)
+      setCurrentData(entry)
+      setLoading(false)
+    })
+  }, [])
 
   useEffect(() => {
-    fetchEvents()
-      .then(setEvents)
-      .finally(() => setLoading(false))
-  }, [])
+    loadPage(page)
+  }, [page, loadPage])
+
+  const events = currentData.data
 
   return (
     <div className="page">
@@ -55,6 +79,14 @@ export function HomePage({ onCreateEvent, onEditEvent }: HomePageProps) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {!loading && events.length > 0 && (
+        <div className="pagination">
+          <button disabled={page === 0} onClick={() => setPage(p => p - 1)}>Previous</button>
+          <span>Page {page + 1}</span>
+          <button disabled={!currentData.hasMore} onClick={() => setPage(p => p + 1)}>Next</button>
         </div>
       )}
     </div>

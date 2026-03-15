@@ -66,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
         .expect("Failed to serialize OPENAPI")
         .into();
     let app = Router::new()
-        .route("/", get(hello_world))
+        .route("/helloworld", get(hello_world))
         .route(
             "/api-docs/openapi.json",
             get({

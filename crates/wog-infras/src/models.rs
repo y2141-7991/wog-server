@@ -178,3 +178,15 @@ pub struct OAuthVerifierRow {
     pub pkce_verifier: String,
     pub created_at: DateTime<Utc>,
 }
+
+pub struct PaginateVec<T> {
+    pub items: Vec<T>,
+    pub next_page: i64,
+    pub has_more: bool,
+}
+
+#[derive(Default)]
+pub struct PaginationRequest {
+    pub per_page: Option<i64>,
+    pub page: i64,
+}

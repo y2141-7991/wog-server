@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     errors::DatabaseError,
-    models::{Event, EventNew, EventUpdate},
+    models::{Event, EventNew, EventUpdate, PaginateVec, PaginationRequest},
     repos::EventRepository,
 };
 
@@ -45,7 +45,7 @@ impl EventRepository for PgEventRepo {
         event_id: Uuid,
     ) -> Result<Event, DatabaseError> {
         Ok(sqlx::query_as::<_, Event>(
-        r#"
+            r#"
             UPDATE events SET 
                 title = $1,
                 description = $2,
@@ -83,12 +83,43 @@ impl EventRepository for PgEventRepo {
     async fn find_list_events_by_current_id(&self, id: Uuid) -> Result<Vec<Event>, DatabaseError> {
         let events = sqlx::query_as::<_, Event>(
             r#"
-                SELECT * FROM events ORDER BY created_at DESC
+                SELECT * FROM events
             "#,
         )
         .bind(id)
         .fetch_all(&self.pg_pool)
         .await?;
         Ok(events)
+    }
+    async fn find_list_events(
+        &self,
+        pagination: PaginationRequest,
+    ) -> Result<PaginateVec<Event>, DatabaseError> {
+        let per_page = pagination.per_page.unwrap_or(3);
+        let offset = pagination.page * per_page;
+        let rows = sqlx::query_as::<_, Event>(
+            r#"
+                SELECT * FROM events
+                ORDER BY created_at DESC
+                LIMIT $1 OFFSET $2
+            "#,
+        )
+        .bind(per_page)
+        .bind(offset)
+        .fetch_all(&self.pg_pool)
+        .await?;
+
+        let has_more = rows.len() as i64 >= per_page;
+        let next_page = if has_more {
+            pagination.page + 1
+        } else {
+            pagination.page
+        };
+
+        Ok(PaginateVec {
+            items: rows,
+            next_page: next_page,
+            has_more,
+        })
     }
 }

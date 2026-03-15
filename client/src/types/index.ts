@@ -30,3 +30,13 @@ export interface EventResponse {
   end_time: string
   location: string | null
 }
+
+export interface PaginationMeta {
+  next_page: number
+  has_more: boolean
+}
+
+export interface EventListResponse {
+  data: EventResponse[]
+  pagination_meta: PaginationMeta
+}

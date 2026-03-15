@@ -1,0 +1,7 @@
+services:
+  server:
+    image: "wog:latest"
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env

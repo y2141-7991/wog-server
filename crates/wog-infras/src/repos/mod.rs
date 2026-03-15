@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     errors::DatabaseError,
-    models::{Event, EventNew, EventUpdate, User},
+    models::{Event, EventNew, EventUpdate, PaginateVec, PaginationRequest, User},
     repos::oauth::OAuthConnection,
 };
 
@@ -68,4 +68,9 @@ pub trait EventRepository {
     async fn find_event_by_id(&self, id: Uuid) -> Result<Event, DatabaseError>;
 
     async fn find_list_events_by_current_id(&self, id: Uuid) -> Result<Vec<Event>, DatabaseError>;
+
+    async fn find_list_events(
+        &self,
+        pagination: PaginationRequest,
+    ) -> Result<PaginateVec<Event>, DatabaseError>;
 }

@@ -1,11 +1,15 @@
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
+    response::IntoResponse,
 };
 use uuid::Uuid;
-use wog_config::event::dto::{
-    EventCreateRequest, EventListResponse, EventResponse, create_from_req_to_domain,
-    update_from_req_to_domain,
+use wog_config::{
+    event::dto::{
+        EventCreateRequest, EventListRequest, EventListResponse, EventResponse,
+        create_from_req_to_domain, update_from_req_to_domain,
+    },
+    model::PaginateResponse,
 };
 use wog_middleware::{AppState, AuthClaims};
 
@@ -48,19 +52,27 @@ pub async fn create_event(
     security(("bearer_auth" = []))
 )]
 #[axum::debug_handler]
-pub async fn get_events_current_id(
-    State(state): State<AppState>,
+pub async fn get_events(
     AuthClaims(_claims): AuthClaims,
-) -> Result<Json<EventListResponse>, RestApiError> {
+    Query(request): Query<EventListRequest>,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, RestApiError> {
     let events = state
         .event_services
-        .find_events_by_current_id(_claims.sub)
+        .find_events(request.pagination().into())
         .await?;
     let items = events
+        .items
         .into_iter()
         .map(|e| e.into())
         .collect::<Vec<EventResponse>>();
-    Ok(Json(EventListResponse { data: items }))
+    Ok(Json(EventListResponse {
+        data: items,
+        pagination_meta: PaginateResponse {
+            next_page: events.next_page,
+            has_more: events.has_more,
+        },
+    }))
 }
 
 #[utoipa::path(

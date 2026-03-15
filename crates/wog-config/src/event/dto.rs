@@ -3,7 +3,9 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
-use wog_infras::models::{Event, EventNew, EventUpdate};
+use wog_infras::models::{Event, EventNew, EventUpdate, PaginationRequest};
+
+use crate::model::PaginateResponse;
 
 #[derive(Deserialize, Serialize, ToSchema)]
 pub struct EventCreateRequest {
@@ -34,6 +36,24 @@ pub struct EventResponse {
 #[derive(Deserialize, Serialize, ToSchema)]
 pub struct EventListResponse {
     pub data: Vec<EventResponse>,
+    pub pagination_meta: PaginateResponse,
+}
+
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct EventListRequest {
+    pub page: Option<i64>,
+    pub per_page: Option<i64>,
+    pub status: Option<String>,
+    pub search: Option<String>,
+}
+
+impl EventListRequest {
+    pub fn pagination(&self) -> PaginationRequest {
+        PaginationRequest {
+            page: self.page.unwrap_or(0),
+            per_page: self.per_page,
+        }
+    }
 }
 
 impl From<Event> for EventResponse {
