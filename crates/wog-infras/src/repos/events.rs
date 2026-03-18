@@ -4,8 +4,8 @@ use uuid::Uuid;
 
 use crate::{
     errors::DatabaseError,
-    models::{Event, EventNew, EventUpdate, PaginateVec, PaginationRequest},
-    repos::EventRepository,
+    models::{Event, EventFilter, EventNew, EventUpdate, PaginateVec, PaginationRequest},
+    repos::{EventRepository, Filterable, build_paginated_query},
 };
 
 pub struct PgEventRepo {
@@ -94,20 +94,15 @@ impl EventRepository for PgEventRepo {
     async fn find_list_events(
         &self,
         pagination: PaginationRequest,
+        filter: EventFilter,
     ) -> Result<PaginateVec<Event>, DatabaseError> {
         let per_page = pagination.per_page.unwrap_or(3);
-        let offset = pagination.page * per_page;
-        let rows = sqlx::query_as::<_, Event>(
-            r#"
-                SELECT * FROM events
-                ORDER BY created_at DESC
-                LIMIT $1 OFFSET $2
-            "#,
-        )
-        .bind(per_page)
-        .bind(offset)
-        .fetch_all(&self.pg_pool)
-        .await?;
+        let mut qb = build_paginated_query("events", &filter, &pagination, "created_at");
+
+        let rows = qb
+            .build_query_as::<Event>()
+            .fetch_all(&self.pg_pool)
+            .await?;
 
         let has_more = rows.len() as i64 >= per_page;
         let next_page = if has_more {
@@ -121,5 +116,16 @@ impl EventRepository for PgEventRepo {
             next_page: next_page,
             has_more,
         })
+    }
+}
+
+impl Filterable for EventFilter {
+    fn apply_filter(&self, qb: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>) {
+        if let Some(ref status) = self.status {
+            qb.push(" AND status = ").push_bind(status.clone());
+        }
+        if let Some(ref location) = self.location {
+            qb.push(" AND location = ").push_bind(location.clone());
+        }
     }
 }

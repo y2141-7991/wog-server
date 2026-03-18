@@ -40,3 +40,8 @@ export interface EventListResponse {
   data: EventResponse[]
   pagination_meta: PaginationMeta
 }
+
+export interface EventFilter {
+  status?: string
+  location?: string
+}

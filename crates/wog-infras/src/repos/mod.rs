@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use sqlx::QueryBuilder;
 use uuid::Uuid;
 
 use crate::{
     errors::DatabaseError,
-    models::{Event, EventNew, EventUpdate, PaginateVec, PaginationRequest, User},
+    models::{Event, EventFilter, EventNew, EventUpdate, PaginateVec, PaginationRequest, User},
     repos::oauth::OAuthConnection,
 };
 
@@ -72,5 +73,26 @@ pub trait EventRepository {
     async fn find_list_events(
         &self,
         pagination: PaginationRequest,
+        filter: EventFilter,
     ) -> Result<PaginateVec<Event>, DatabaseError>;
+}
+
+pub trait Filterable {
+    fn apply_filter(&self, qb: &mut QueryBuilder<'_, sqlx::Postgres>);
+}
+
+fn build_paginated_query<'a, F: Filterable>(
+    table: &'a str,
+    filter: &'a F,
+    pagination: &'a PaginationRequest,
+    order_by: &'a str,
+) -> QueryBuilder<'a, sqlx::Postgres> {
+    let mut qb = QueryBuilder::new(format!("SELECT * FROM {table} WHERE 1=1"));
+    filter.apply_filter(&mut qb);
+    qb.push(format!(" ORDER BY {order_by}"));
+    qb.push(" LIMIT ")
+        .push_bind(pagination.per_page.unwrap_or(3));
+    qb.push(" OFFSET ")
+        .push_bind(pagination.page * pagination.per_page.unwrap_or(0));
+    qb
 }

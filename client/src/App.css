@@ -172,11 +172,19 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   margin-bottom: 1rem;
 }
 
 .page-header h2 {
   margin: 0;
+}
+
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .text-muted {
@@ -192,6 +200,95 @@
 
 .empty-state .create-event-btn {
   margin-top: 0.5rem;
+}
+
+/* Filter box */
+.filter-box {
+  position: relative;
+}
+
+.filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.8rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #2a2a2a;
+  color: inherit;
+  cursor: pointer;
+}
+
+.filter-toggle:hover {
+  border-color: #646cff;
+  background: rgba(100, 108, 255, 0.1);
+}
+
+.filter-badge {
+  background: #646cff;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 600;
+  min-width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.filter-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 50;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: #2a2a2a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.filter-fields {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: #aaa;
+}
+
+.filter-field input,
+.filter-field select {
+  padding: 0.4rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #1a1a1a;
+  color: inherit;
+  font-size: 0.8rem;
+  font-family: inherit;
+}
+
+.filter-field input:focus,
+.filter-field select:focus {
+  outline: none;
+  border-color: #646cff;
+}
+
+.filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 
 /* Event list */
@@ -390,6 +487,19 @@
   }
   .dropdown-item:hover {
     background: rgba(0, 0, 0, 0.05);
+  }
+  .filter-toggle {
+    background: #fff;
+    border-color: rgba(0, 0, 0, 0.15);
+  }
+  .filter-panel {
+    background: #fff;
+    border-color: rgba(0, 0, 0, 0.1);
+  }
+  .filter-field input,
+  .filter-field select {
+    background: #f9f9f9;
+    border-color: rgba(0, 0, 0, 0.15);
   }
   .event-card {
     background: #fff;

@@ -3,22 +3,37 @@ pub mod models;
 pub mod repos;
 pub mod services;
 
-use anyhow::Ok;
+use anyhow::{Ok, Result};
 use chrono::Utc;
 use envconfig::Envconfig;
-use jsonwebtoken::{EncodingKey, Header, encode};
+use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use uuid::Uuid;
 
 use crate::{errors::DatabaseError, models::User};
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub enum TokenType {
+    Access,
+    Refresh,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
     pub sub: Uuid,
     pub username: String,
+    pub token_type: TokenType,
     pub exp: usize,
     pub iat: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TokenPair {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub lang: String,
+    pub timestamp: i64,
 }
 
 #[derive(Debug, Envconfig, Clone)]
@@ -31,8 +46,12 @@ pub struct DefaultConfig {
     pub server_port: u16,
     #[envconfig(from = "JWT_SECRET")]
     pub jwt_secret: String,
-    #[envconfig(from = "JWT_EXPIRATION_HOURS")]
-    pub jwt_expiration_hours: i64,
+    #[envconfig(from = "REFRESH_TOKEN_SECRET")]
+    pub refresh_token_secret: String,
+    #[envconfig(from = "ACCESS_TOKEN_EXPIRE_MINUTES")]
+    pub access_token_expire_minutes: i64,
+    #[envconfig(from = "REFRESH_TOKEN_EXPIRE_MINUTES")]
+    pub refresh_token_expire_minutes: i64,
     #[envconfig(from = "CLIENT_URL")]
     pub client_url: String,
     #[envconfig(from = "REST_API_URL")]
@@ -52,21 +71,73 @@ impl AppConfig {
             default_config,
         })
     }
-    pub fn generate_token(&self, user: User) -> Result<String, DatabaseError> {
+    pub fn generate_token_pair(&self, user: &User) -> Result<TokenPair> {
+        let access_token = self.build_token(user.id, &user.username, TokenType::Access)?;
+        let refresh_token = self.build_token(user.id, &user.username, TokenType::Refresh)?;
+        Ok(TokenPair {
+            access_token,
+            refresh_token,
+            lang: "en".to_string(),
+            timestamp: Utc::now().timestamp(),
+        })
+    }
+
+    pub fn refresh_access_token(&self, refresh_claims: &Claims) -> Result<TokenPair> {
+        if refresh_claims.token_type != TokenType::Refresh {
+            anyhow::bail!("Invalid token type: expected refresh token");
+        }
+        let access_token = self.build_token(
+            refresh_claims.sub,
+            &refresh_claims.username,
+            TokenType::Access,
+        )?;
+        let refresh_token = self.build_token(
+            refresh_claims.sub,
+            &refresh_claims.username,
+            TokenType::Refresh,
+        )?;
+        Ok(TokenPair {
+            access_token,
+            refresh_token,
+            lang: "en".to_string(),
+            timestamp: Utc::now().timestamp(),
+        })
+    }
+
+    fn build_token(
+        &self,
+        sub: Uuid,
+        username: &str,
+        token_type: TokenType,
+    ) -> Result<String, DatabaseError> {
         let now = Utc::now();
-        let exp = now + chrono::Duration::hours(self.default_config.jwt_expiration_hours);
+        let (expire_minutes, algorithm, secret) = match token_type {
+            TokenType::Access => (
+                self.default_config.access_token_expire_minutes,
+                Algorithm::HS256,
+                &self.default_config.jwt_secret,
+            ),
+            TokenType::Refresh => (
+                self.default_config.refresh_token_expire_minutes,
+                Algorithm::HS512,
+                &self.default_config.refresh_token_secret,
+            ),
+        };
+        let exp = now + chrono::Duration::minutes(expire_minutes);
 
         let claims = Claims {
-            sub: user.id,
-            username: user.username.clone(),
+            sub,
+            username: username.to_string(),
+            token_type,
             exp: exp.timestamp() as usize,
             iat: now.timestamp() as usize,
         };
 
+        let header = Header::new(algorithm);
         encode(
-            &Header::default(),
+            &header,
             &claims,
-            &EncodingKey::from_secret(self.default_config.jwt_secret.as_bytes()),
+            &EncodingKey::from_secret(secret.as_bytes()),
         )
         .map_err(|e| DatabaseError::Others(format!("JWT encode error: {}", e)))
     }

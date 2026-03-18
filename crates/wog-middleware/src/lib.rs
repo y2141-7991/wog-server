@@ -1,3 +1,5 @@
+pub mod rate_limit;
+
 use axum::{
     extract::FromRequestParts,
     http::{StatusCode, request::Parts},
@@ -7,7 +9,7 @@ use axum_extra::extract::CookieJar;
 use jsonwebtoken::{DecodingKey, Validation, decode};
 use serde_json::json;
 use wog_infras::{
-    AppConfig, Claims,
+    AppConfig, Claims, TokenType,
     services::{events::EventServices, oauth::OAuthServices, users::UserServices},
 };
 
@@ -65,9 +67,18 @@ impl FromRequestParts<AppState> for AuthClaims {
             &Validation::default(),
         )
         .map_err(|e| {
-            tracing::warn!("JWT validation failed: {}", e);
+            tracing::warn!(
+                method = %parts.method,
+                uri = %parts.uri,
+                "JWT validation failed: {}", e);
             AuthError("Invalid or expired token".into())
         })?;
+
+        if token_data.claims.token_type != TokenType::Access {
+            return Err(AuthError(
+                "Refresh token cannot be used for authentication".into(),
+            ));
+        }
 
         Ok(AuthClaims(token_data.claims))
     }

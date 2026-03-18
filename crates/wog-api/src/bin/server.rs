@@ -8,8 +8,9 @@ use axum::{
 use bytes::Bytes;
 use tower_http::{
     cors::{Any, CorsLayer},
-    trace::TraceLayer,
+    trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
 };
+use tracing::Level;
 use tracing_subscriber::{EnvFilter, fmt};
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
@@ -21,7 +22,10 @@ use wog_infras::{
     repos::{events::PgEventRepo, oauth::PgOAuthRepo, users::PgUserRepo},
     services::{events::EventServices, oauth::OAuthServices, users::UserServices},
 };
-use wog_middleware::AppState;
+use wog_middleware::{
+    AppState,
+    rate_limit::{RateLimiter, rate_limit_middleware},
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -65,6 +69,9 @@ async fn main() -> anyhow::Result<()> {
         .to_json()
         .expect("Failed to serialize OPENAPI")
         .into();
+    // 100 requests per 60 seconds per client
+    let rate_limiter = RateLimiter::new(100, std::time::Duration::from_secs(60));
+
     let app = Router::new()
         .route("/helloworld", get(hello_world))
         .route(
@@ -82,7 +89,13 @@ async fn main() -> anyhow::Result<()> {
         .merge(Scalar::with_url("/scalar", openapi.clone()))
         .merge(oauth_routes())
         .merge(api_router)
-        .layer(TraceLayer::new_for_http())
+        .layer(axum::middleware::from_fn(rate_limit_middleware))
+        .layer(axum::Extension(rate_limiter))
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+                .on_response(DefaultOnResponse::new().level(Level::INFO)),
+        )
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)

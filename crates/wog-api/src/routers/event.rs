@@ -3,6 +3,7 @@ use axum::{
     extract::{Path, Query, State},
     response::IntoResponse,
 };
+use tracing::instrument;
 use uuid::Uuid;
 use wog_config::{
     event::dto::{
@@ -28,6 +29,7 @@ use crate::errors::{RestApiError, RestApiResponseError};
     security(("bearer_auth" = []))
 )]
 #[axum::debug_handler]
+#[instrument(skip(state, _claims, payload))]
 pub async fn create_event(
     State(state): State<AppState>,
     AuthClaims(_claims): AuthClaims,
@@ -52,6 +54,7 @@ pub async fn create_event(
     security(("bearer_auth" = []))
 )]
 #[axum::debug_handler]
+#[instrument(skip(state, _claims, request))]
 pub async fn get_events(
     AuthClaims(_claims): AuthClaims,
     Query(request): Query<EventListRequest>,
@@ -59,7 +62,7 @@ pub async fn get_events(
 ) -> Result<impl IntoResponse, RestApiError> {
     let events = state
         .event_services
-        .find_events(request.pagination().into())
+        .find_events(request.pagination.into(), request.event_filter.into())
         .await?;
     let items = events
         .items
@@ -87,6 +90,7 @@ pub async fn get_events(
     security(("bearer_auth" = []))
 )]
 #[axum::debug_handler]
+#[instrument(skip(state, _claims, payload), fields(event_id = %event_id))]
 pub async fn update_event(
     State(state): State<AppState>,
     AuthClaims(_claims): AuthClaims,

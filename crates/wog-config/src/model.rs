@@ -1,10 +1,15 @@
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use serde_with::{DisplayFromStr, serde_as};
+use utoipa::{IntoParams, ToSchema};
 use wog_infras::models::PaginationRequest;
 
-#[derive(Deserialize, Serialize, ToSchema)]
+#[serde_as]
+#[derive(ToSchema, serde::Serialize, serde::Deserialize, Copy, Clone, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct PaginateRequest {
+    #[serde_as(as = "Option<DisplayFromStr>")]
     pub page: Option<i64>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
     pub per_page: Option<i64>,
 }
 

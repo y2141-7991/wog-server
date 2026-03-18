@@ -190,3 +190,8 @@ pub struct PaginationRequest {
     pub per_page: Option<i64>,
     pub page: i64,
 }
+
+pub struct EventFilter {
+    pub status: Option<String>,
+    pub location: Option<String>,
+}

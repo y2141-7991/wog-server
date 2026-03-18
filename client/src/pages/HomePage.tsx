@@ -1,6 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchEvents } from '../api/event'
-import type { EventResponse } from '../types'
+import { FilterBox } from '../components/FilterBox'
+import type { EventFilter, EventResponse } from '../types'
+
+const EVENT_FILTER_FIELDS = [
+  {
+    key: 'status',
+    label: 'Status',
+    type: 'select' as const,
+    options: [
+      { value: 'OPEN', label: 'Open' },
+      { value: 'DRAFT', label: 'Draft' },
+      { value: 'CLOSED', label: 'Closed' },
+      { value: 'CANCELLED', label: 'Cancelled' },
+    ],
+  },
+  {
+    key: 'location',
+    label: 'Location',
+    type: 'text' as const,
+    placeholder: 'e.g. Ho Chi Minh',
+  },
+]
 
 interface HomePageProps {
   onCreateEvent: () => void
@@ -15,11 +36,13 @@ interface CachedPage {
 export function HomePage({ onCreateEvent, onEditEvent }: HomePageProps) {
   const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState<EventFilter>({})
   const [currentData, setCurrentData] = useState<CachedPage>({ data: [], hasMore: false })
-  const cache = useRef<Map<number, CachedPage>>(new Map())
+  const cache = useRef<Map<string, CachedPage>>(new Map())
 
-  const loadPage = useCallback((p: number) => {
-    const cached = cache.current.get(p)
+  const loadPage = useCallback((p: number, f: EventFilter) => {
+    const key = `${p}:${JSON.stringify(f)}`
+    const cached = cache.current.get(key)
     if (cached) {
       setCurrentData(cached)
       setLoading(false)
@@ -27,17 +50,24 @@ export function HomePage({ onCreateEvent, onEditEvent }: HomePageProps) {
     }
 
     setLoading(true)
-    fetchEvents(p).then((res) => {
+    fetchEvents(p, 3, f).then((res) => {
       const entry = { data: res.data, hasMore: res.pagination_meta.has_more }
-      cache.current.set(p, entry)
+      cache.current.set(key, entry)
       setCurrentData(entry)
       setLoading(false)
     })
   }, [])
 
   useEffect(() => {
-    loadPage(page)
-  }, [page, loadPage])
+    loadPage(page, filters)
+  }, [page, filters, loadPage])
+
+  const handleFilter = (newFilters: EventFilter) => {
+    if (JSON.stringify(newFilters) === JSON.stringify(filters)) return
+    cache.current.clear()
+    setPage(0)
+    setFilters(newFilters)
+  }
 
   const events = currentData.data
 
@@ -45,7 +75,10 @@ export function HomePage({ onCreateEvent, onEditEvent }: HomePageProps) {
     <div className="page">
       <div className="page-header">
         <h2>My Events</h2>
-        <button className="create-event-btn" onClick={onCreateEvent}>+ Create Event</button>
+        <div className="page-header-actions">
+          <FilterBox fields={EVENT_FILTER_FIELDS} onApply={handleFilter} />
+          <button className="create-event-btn" onClick={onCreateEvent}>+ Create Event</button>
+        </div>
       </div>
 
       {loading && <p className="text-muted">Loading events...</p>}

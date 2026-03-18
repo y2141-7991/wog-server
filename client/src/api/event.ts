@@ -1,10 +1,20 @@
-import type { EventCreateRequest, EventListResponse, EventResponse } from '../types'
+import type { EventCreateRequest, EventFilter, EventListResponse, EventResponse } from '../types'
 
 const API = import.meta.env.VITE_API_URL || ''
 const EVENTS_URL = `${API}/api/v1/events`
 
-export async function fetchEvents(page = 0, perPage = 3): Promise<EventListResponse> {
-  const res = await fetch(`${EVENTS_URL}?page=${page}&per_page=${perPage}`, { credentials: 'include' })
+export async function fetchEvents(page = 0, perPage = 3, filters: EventFilter = {}): Promise<EventListResponse> {
+  const params = new URLSearchParams()
+  params.set('page', String(page))
+  params.set('per_page', String(perPage))
+
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== '') {
+      params.set(key, String(value))
+    }
+  }
+
+  const res = await fetch(`${EVENTS_URL}?${params}`, { credentials: 'include' })
   if (!res.ok) return { data: [], pagination_meta: { next_page: 0, has_more: false } }
   return res.json()
 }

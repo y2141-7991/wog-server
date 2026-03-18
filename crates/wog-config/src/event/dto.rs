@@ -1,11 +1,12 @@
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use serde_with::serde_as;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
-use wog_infras::models::{Event, EventNew, EventUpdate, PaginationRequest};
+use wog_infras::models::{Event, EventFilter, EventNew, EventUpdate};
 
-use crate::model::PaginateResponse;
+use crate::model::{PaginateRequest, PaginateResponse};
 
 #[derive(Deserialize, Serialize, ToSchema)]
 pub struct EventCreateRequest {
@@ -39,19 +40,28 @@ pub struct EventListResponse {
     pub pagination_meta: PaginateResponse,
 }
 
-#[derive(Deserialize, Serialize, ToSchema)]
+#[derive(Deserialize, Serialize, ToSchema, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct EventListRequest {
-    pub page: Option<i64>,
-    pub per_page: Option<i64>,
-    pub status: Option<String>,
-    pub search: Option<String>,
+    #[serde(flatten)]
+    pub pagination: PaginateRequest,
+    #[serde(flatten)]
+    pub event_filter: EventFilterRequest,
 }
 
-impl EventListRequest {
-    pub fn pagination(&self) -> PaginationRequest {
-        PaginationRequest {
-            page: self.page.unwrap_or(0),
-            per_page: self.per_page,
+#[serde_as]
+#[derive(ToSchema, IntoParams, serde::Serialize, serde::Deserialize)]
+#[into_params(parameter_in = Query)]
+pub struct EventFilterRequest {
+    pub status: Option<String>,
+    pub location: Option<String>,
+}
+
+impl From<EventFilterRequest> for EventFilter {
+    fn from(value: EventFilterRequest) -> Self {
+        EventFilter {
+            status: value.status,
+            location: value.location,
         }
     }
 }

@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use crate::{
     errors::DatabaseError,
-    models::{Event, EventNew, EventUpdate, PaginateVec, PaginationRequest},
+    models::{Event, EventFilter, EventNew, EventUpdate, PaginateVec, PaginationRequest},
     repos::{DynEventRepository, EventRepository},
 };
 
@@ -31,7 +31,11 @@ impl EventServices {
     ) -> Result<Event, DatabaseError> {
         Ok(self.event_repo.update_event(event, event_id).await?)
     }
-    pub async fn find_events(&self, pagination: PaginationRequest) -> Result<PaginateVec<Event>, DatabaseError> {
-        Ok(self.event_repo.find_list_events(pagination).await?)
+    pub async fn find_events(
+        &self,
+        pagination: PaginationRequest,
+        filter: EventFilter,
+    ) -> Result<PaginateVec<Event>, DatabaseError> {
+        Ok(self.event_repo.find_list_events(pagination, filter).await?)
     }
 }
