@@ -19,14 +19,23 @@ Event management platform built with Rust (Axum) and React.
 1. Create a `.env` file:
 
 ```env
-DATABASE_URL=postgres://user:password@localhost:5432/wog
-SERVER_HOST=0.0.0.0
-SERVER_PORT=3000
+VIET_QR_CLIENT_ID=
+VIET_QR_API_KEY=
+
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
 CLIENT_URL=http://localhost:5173
-JWT_SECRET=your-secret-key
-JWT_EXPIRATION_HOURS=24
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
+JWT_SECRET=
+REFRESH_TOKEN_SECRET=
+ACCESS_TOKEN_EXPIRE_MINUTES=15
+REFRESH_TOKEN_EXPIRE_MINUTES=10080
+
+DATABASE_URL=
+SERVER_HOST=127.0.0.1
+SERVER_PORT=3000
+REST_API_URL=http://localhost:5173
+
+RUST_LOG=info,sqlx::query=info
 ```
 
 2. Run the backend:
