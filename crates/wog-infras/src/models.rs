@@ -13,8 +13,26 @@ pub struct User {
     password: Option<String>,
     pub avatar_url: Option<String>,
     pub is_online: bool,
+    pub email_verified: bool,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+}
+
+impl User {
+    /// The stored Argon2 password hash, if this account has one set.
+    /// `None` for accounts created via OAuth that never set a password.
+    pub fn password_hash(&self) -> Option<&str> {
+        self.password.as_deref()
+    }
+}
+
+#[derive(Debug, Clone, FromRow, Deserialize, Serialize)]
+pub struct EmailVerificationToken {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub token: String,
+    pub expires_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, FromRow, Deserialize, Serialize)]

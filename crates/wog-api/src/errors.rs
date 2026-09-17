@@ -92,6 +92,14 @@ impl From<DatabaseError> for RestApiError {
             DatabaseError::UniqueViolation => {
                 RestApiError::Conflict("Resource already exists".into())
             }
+            DatabaseError::ExistedDataError(msg) => RestApiError::Conflict(msg),
+            DatabaseError::InvalidCredentials => {
+                RestApiError::Unauthorized("Invalid email or password".into())
+            }
+            DatabaseError::InvalidVerificationToken => {
+                RestApiError::BadRequest("Invalid or expired verification link".into())
+            }
+            DatabaseError::ValidationError(msg) => RestApiError::BadRequest(msg),
             _ => RestApiError::Database(value.to_string()),
         }
     }

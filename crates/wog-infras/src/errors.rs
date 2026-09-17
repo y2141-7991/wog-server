@@ -18,6 +18,10 @@ pub enum DatabaseError {
     ValidationError(String),
     #[error("OAuth failure: {0}")]
     OauthError(String),
+    #[error("Invalid email or password")]
+    InvalidCredentials,
+    #[error("Invalid or expired verification link")]
+    InvalidVerificationToken,
     #[error("An unknown error occurred: {0}")]
     Others(String),
 }

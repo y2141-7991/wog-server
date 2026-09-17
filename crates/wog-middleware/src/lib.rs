@@ -10,6 +10,7 @@ use jsonwebtoken::{DecodingKey, Validation, decode};
 use serde_json::json;
 use wog_infras::{
     AppConfig, Claims, TokenType,
+    email::EmailService,
     services::{events::EventServices, oauth::OAuthServices, users::UserServices},
 };
 
@@ -19,6 +20,7 @@ pub struct AppState {
     pub app_config: AppConfig,
     pub oauth_services: OAuthServices,
     pub event_services: EventServices,
+    pub email_service: EmailService,
 }
 
 pub struct AuthClaims(pub Claims);

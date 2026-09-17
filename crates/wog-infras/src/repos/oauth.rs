@@ -110,8 +110,8 @@ impl OAuthRepository for PgOAuthRepo {
     ) -> Result<User, DatabaseError> {
         sqlx::query_as::<_, User>(
             r#"
-                INSERT INTO users (id, username, email, avatar_url, oauth_provider, oauth_sub)
-                VALUES ($1, $2, $3, $4, $5, $6)
+                INSERT INTO users (id, username, email, avatar_url, oauth_provider, oauth_sub, email_verified)
+                VALUES ($1, $2, $3, $4, $5, $6, TRUE)
                 RETURNING *
             "#,
         )

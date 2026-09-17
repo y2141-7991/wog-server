@@ -4,9 +4,14 @@ use async_trait::async_trait;
 use sqlx::QueryBuilder;
 use uuid::Uuid;
 
+use chrono::{DateTime, Utc};
+
 use crate::{
     errors::DatabaseError,
-    models::{Event, EventFilter, EventNew, EventUpdate, PaginateVec, PaginationRequest, User},
+    models::{
+        EmailVerificationToken, Event, EventFilter, EventNew, EventUpdate, PaginateVec,
+        PaginationRequest, User,
+    },
     repos::oauth::OAuthConnection,
 };
 
@@ -29,6 +34,24 @@ pub trait UserRepository {
     ) -> Result<User, DatabaseError>;
 
     async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, DatabaseError>;
+
+    async fn find_by_email(&self, email: &str) -> Result<Option<User>, DatabaseError>;
+
+    async fn create_verification_token(
+        &self,
+        user_id: Uuid,
+        token: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), DatabaseError>;
+
+    async fn find_verification_token(
+        &self,
+        token: &str,
+    ) -> Result<Option<EmailVerificationToken>, DatabaseError>;
+
+    async fn delete_verification_token(&self, token: &str) -> Result<(), DatabaseError>;
+
+    async fn mark_email_verified(&self, user_id: Uuid) -> Result<User, DatabaseError>;
 }
 
 #[async_trait]

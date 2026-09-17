@@ -1,7 +1,26 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 use wog_infras::models::{User, UserProfile};
+
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct RegisterRequest {
+    pub username: String,
+    pub email: String,
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct LoginRequest {
+    pub email: String,
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct VerifyEmailRequest {
+    pub token: String,
+}
 
 #[derive(Serialize, ToSchema)]
 pub struct UserResponse {
@@ -10,6 +29,7 @@ pub struct UserResponse {
     pub username: String,
     pub avatar_url: Option<String>,
     pub is_online: bool,
+    pub email_verified: bool,
 }
 
 pub struct UserProfileResponse {
@@ -28,6 +48,7 @@ impl From<User> for UserResponse {
             username: value.username,
             avatar_url: value.avatar_url,
             is_online: value.is_online,
+            email_verified: value.email_verified,
         }
     }
 }
@@ -40,6 +61,9 @@ impl From<UserProfile> for UserResponse {
             username: value.username,
             avatar_url: value.avatar_url,
             is_online: value.is_online,
+            // UserProfile doesn't carry verification state; assume unverified
+            // rather than asserting something we don't actually know.
+            email_verified: false,
         }
     }
 }

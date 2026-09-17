@@ -18,6 +18,7 @@ use utoipa_scalar::{Scalar, Servable};
 use wog_api::{api_routes, routers::oauth_routes};
 use wog_config::user::dto::UserResponse;
 use wog_infras::{
+    email::EmailService,
     get_config,
     repos::{events::PgEventRepo, oauth::PgOAuthRepo, users::PgUserRepo},
     services::{events::EventServices, oauth::OAuthServices, users::UserServices},
@@ -29,6 +30,7 @@ use wog_middleware::{
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    dotenvy::dotenv().ok();
     let env_filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info,wog_api=debug,wog_infras=debug"));
 
@@ -53,12 +55,14 @@ async fn main() -> anyhow::Result<()> {
     let user_services = UserServices::new(user_repo);
     let oauth_services = OAuthServices::new(oauth_repo);
     let event_services = EventServices::new(event_repo);
+    let email_service = EmailService::new(&app_config.default_config);
 
     let app_state = AppState {
         user_services,
         oauth_services,
         app_config: app_config.clone(),
         event_services,
+        email_service,
     };
 
     let (api_router, openapi) = OpenApiRouter::<AppState>::with_openapi(ApiDoc::openapi())

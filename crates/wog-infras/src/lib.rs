@@ -1,5 +1,7 @@
+pub mod email;
 pub mod errors;
 pub mod models;
+pub mod password;
 pub mod repos;
 pub mod services;
 
@@ -56,6 +58,20 @@ pub struct DefaultConfig {
     pub client_url: String,
     #[envconfig(from = "REST_API_URL")]
     pub rest_api_url: String,
+    #[envconfig(from = "SMTP_HOST", default = "")]
+    pub smtp_host: String,
+    #[envconfig(from = "SMTP_PORT", default = "587")]
+    pub smtp_port: u16,
+    #[envconfig(from = "SMTP_USERNAME", default = "")]
+    pub smtp_username: String,
+    #[envconfig(from = "SMTP_PASSWORD", default = "")]
+    pub smtp_password: String,
+    #[envconfig(from = "SMTP_FROM_EMAIL", default = "")]
+    pub smtp_from_email: String,
+    #[envconfig(from = "SMTP_FROM_NAME", default = "WoG")]
+    pub smtp_from_name: String,
+    #[envconfig(from = "EMAIL_VERIFICATION_EXPIRE_HOURS", default = "24")]
+    pub email_verification_expire_hours: i64,
 }
 
 #[derive(Clone)]
