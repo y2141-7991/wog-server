@@ -98,26 +98,6 @@ pub struct Wallet {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
-#[sqlx(type_name = "VARCHAR", rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum TxType {
-    TopUp,
-    EventJoin,
-    Refund,
-    Withdrawal,
-}
-
-impl TxType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            TxType::TopUp => "TOP_UP",
-            TxType::EventJoin => "EVENT_JOIN",
-            TxType::Refund => "REFUND",
-            TxType::Withdrawal => "WITHDRAWAL",
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct WalletTransaction {
     pub id: Uuid,

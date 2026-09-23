@@ -11,7 +11,10 @@ use serde_json::json;
 use wog_infras::{
     AppConfig, Claims, TokenType,
     email::EmailService,
-    services::{events::EventServices, oauth::OAuthServices, users::UserServices},
+    services::{
+        event_registration::EventRegistrationServices, events::EventServices,
+        oauth::OAuthServices, users::UserServices, wallet::WalletServices,
+    },
 };
 
 #[derive(Clone)]
@@ -21,6 +24,8 @@ pub struct AppState {
     pub oauth_services: OAuthServices,
     pub event_services: EventServices,
     pub email_service: EmailService,
+    pub wallet_services: WalletServices,
+    pub event_registration_services: EventRegistrationServices,
 }
 
 pub struct AuthClaims(pub Claims);

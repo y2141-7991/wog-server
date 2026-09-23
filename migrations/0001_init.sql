@@ -10,11 +10,24 @@ CREATE TABLE IF NOT EXISTS users (
     password        VARCHAR(255),
     avatar_url      TEXT,
     is_online       BOOLEAN      NOT NULL DEFAULT FALSE,
+    email_verified  BOOLEAN      NOT NULL DEFAULT FALSE,
     oauth_provider  VARCHAR(20),
     oauth_sub       VARCHAR(255),
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
+
+-- ══════════════════════════════════════════════════════════════
+-- Email verification tokens
+-- ══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token       TEXT NOT NULL UNIQUE,
+    expires_at  TIMESTAMPTZ NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- ══════════════════════════════════════════════════════════════
 -- OAuth PKCE/CSRF Verifiers (short-lived, cleaned up after use)
 -- ══════════════════════════════════════════════════════════════
@@ -24,6 +37,7 @@ CREATE TABLE IF NOT EXISTS oauth_verifiers (
     pkce_verifier   TEXT NOT NULL,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
 -- ══════════════════════════════════════════════════════════════
 -- Chat Rooms
 -- ══════════════════════════════════════════════════════════════
@@ -90,10 +104,10 @@ CREATE TABLE IF NOT EXISTS wallets (
 -- This is the audit trail / source of truth.
 --
 -- Types:
---   TOP_UP       +amount  (user adds money)
---   EVENT_JOIN   -amount  (user pays to join event)
---   REFUND       +amount  (user gets money back)
---   WITHDRAWAL   -amount  (user withdraws money)
+--   EVENT_JOIN    -amount  (user pays to join event)
+--   REFUND        +amount  (user gets money back)
+--   TRANSFER_OUT  -amount  (user sends credits to another user)
+--   TRANSFER_IN   +amount  (user receives credits from another user)
 --
 CREATE TABLE IF NOT EXISTS wallet_transactions (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -102,14 +116,14 @@ CREATE TABLE IF NOT EXISTS wallet_transactions (
     amount          DECIMAL(18,2) NOT NULL,
     balance_before  DECIMAL(18,2) NOT NULL,
     balance_after   DECIMAL(18,2) NOT NULL,
-    reference_type  VARCHAR(20),          -- 'event_registration', null for top-up
-    reference_id    UUID,                 -- event_registration.id, null for top-up
+    reference_type  VARCHAR(20),          -- 'event_registration', 'transfer', null for adjustments
+    reference_id    UUID,                 -- event_registration.id, transfer ref, null for adjustments
     description     TEXT,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
 
     CONSTRAINT positive_amount CHECK (amount > 0),
     CONSTRAINT valid_tx_type CHECK (
-        tx_type IN ('TOP_UP', 'EVENT_JOIN', 'REFUND', 'WITHDRAWAL')
+        tx_type IN ('EVENT_JOIN', 'REFUND', 'TRANSFER_OUT', 'TRANSFER_IN')
     )
 );
 
@@ -168,9 +182,6 @@ CREATE INDEX IF NOT EXISTS idx_events_organizer ON events(organizer_id);
 CREATE INDEX IF NOT EXISTS idx_reg_event        ON event_registrations(event_id);
 CREATE INDEX IF NOT EXISTS idx_reg_user         ON event_registrations(user_id);
 
--- ══════════════════════════════════════════════════════════════
--- Indexes
--- ══════════════════════════════════════════════════════════════
 CREATE INDEX IF NOT EXISTS idx_users_email       ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_username    ON users(username);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oauth
@@ -180,3 +191,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oauth
 CREATE INDEX IF NOT EXISTS idx_messages_room     ON messages(room_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_sender   ON messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_room_members_user ON room_members(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_user  ON email_verification_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_token ON email_verification_tokens(token);

@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
-use wog_infras::models::{Event, EventFilter, EventNew, EventUpdate};
+use wog_infras::models::{Event, EventFilter, EventNew, EventRegistration, EventUpdate, Wallet};
 
-use crate::model::{PaginateRequest, PaginateResponse};
+use crate::{model::{PaginateRequest, PaginateResponse}, wallet::dto::WalletResponse};
 
 #[derive(Deserialize, Serialize, ToSchema)]
 pub struct EventCreateRequest {
@@ -109,5 +109,47 @@ pub fn update_from_req_to_domain(event: EventCreateRequest) -> EventUpdate {
         start_time: event.start_time,
         end_time: event.end_time,
         location: event.location,
+    }
+}
+
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct EventRegistrationResponse {
+    pub id: Uuid,
+    pub event_id: Uuid,
+    pub user_id: Uuid,
+    pub amount_paid: Decimal,
+    pub status: String,
+    pub registered_at: DateTime<Utc>,
+    pub cancelled_at: Option<DateTime<Utc>>,
+}
+
+impl From<EventRegistration> for EventRegistrationResponse {
+    fn from(value: EventRegistration) -> Self {
+        Self {
+            id: value.id,
+            event_id: value.event_id,
+            user_id: value.user_id,
+            amount_paid: value.amount_paid,
+            status: value.status,
+            registered_at: value.registered_at,
+            cancelled_at: value.cancelled_at,
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct EventRegistrationActionResponse {
+    pub registration: EventRegistrationResponse,
+    pub event: EventResponse,
+    pub wallet: Option<WalletResponse>,
+}
+
+impl EventRegistrationActionResponse {
+    pub fn new(registration: EventRegistration, event: Event, wallet: Option<Wallet>) -> Self {
+        Self {
+            registration: registration.into(),
+            event: event.into(),
+            wallet: wallet.map(Into::into),
+        }
     }
 }

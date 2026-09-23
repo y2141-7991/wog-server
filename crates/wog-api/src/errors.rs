@@ -100,6 +100,24 @@ impl From<DatabaseError> for RestApiError {
                 RestApiError::BadRequest("Invalid or expired verification link".into())
             }
             DatabaseError::ValidationError(msg) => RestApiError::BadRequest(msg),
+            DatabaseError::EventNotOpen => {
+                RestApiError::BadRequest("This event is not open for registration".into())
+            }
+            DatabaseError::EventFull => {
+                RestApiError::Conflict("This event has reached full capacity".into())
+            }
+            DatabaseError::InsufficientBalance => {
+                RestApiError::BadRequest("Insufficient wallet balance".into())
+            }
+            DatabaseError::AlreadyRegistered => {
+                RestApiError::Conflict("You are already registered for this event".into())
+            }
+            DatabaseError::RegistrationNotFound => {
+                RestApiError::NotFound("Registration not found".into())
+            }
+            DatabaseError::CannotJoinOwnEvent => {
+                RestApiError::BadRequest("You cannot join your own event".into())
+            }
             _ => RestApiError::Database(value.to_string()),
         }
     }

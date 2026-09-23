@@ -1,4 +1,11 @@
-import type { EventCreateRequest, EventFilter, EventListResponse, EventResponse } from '../types'
+import type {
+  EventCreateRequest,
+  EventFilter,
+  EventListResponse,
+  EventRegistrationActionResponse,
+  EventRegistrationResponse,
+  EventResponse,
+} from '../types'
 
 const API = import.meta.env.VITE_API_URL || ''
 const EVENTS_URL = `${API}/api/v1/events`
@@ -44,5 +51,35 @@ export async function createEvent(data: EventCreateRequest): Promise<EventRespon
     const err = await res.json().catch(() => ({ message: 'Failed to create event' }))
     throw new Error(err.message)
   }
+  return res.json()
+}
+
+export async function joinEvent(id: string): Promise<EventRegistrationActionResponse> {
+  const res = await fetch(`${EVENTS_URL}/${id}/join`, {
+    method: 'POST',
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Failed to join event' }))
+    throw new Error(err.message)
+  }
+  return res.json()
+}
+
+export async function leaveEvent(id: string): Promise<EventRegistrationActionResponse> {
+  const res = await fetch(`${EVENTS_URL}/${id}/leave`, {
+    method: 'POST',
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Failed to leave event' }))
+    throw new Error(err.message)
+  }
+  return res.json()
+}
+
+export async function fetchMyRegistration(id: string): Promise<EventRegistrationResponse | null> {
+  const res = await fetch(`${EVENTS_URL}/${id}/registration`, { credentials: 'include' })
+  if (!res.ok) return null
   return res.json()
 }

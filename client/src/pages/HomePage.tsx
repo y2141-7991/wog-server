@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { fetchEvents } from '../api/event'
+import { fetchEvents, fetchMyRegistration, joinEvent, leaveEvent } from '../api/event'
 import { FilterBox } from '../components/FilterBox'
-import type { EventFilter, EventResponse } from '../types'
+import type { EventFilter, EventRegistrationResponse, EventResponse } from '../types'
 
 const EVENT_FILTER_FIELDS = [
   {
@@ -24,6 +24,7 @@ const EVENT_FILTER_FIELDS = [
 ]
 
 interface HomePageProps {
+  currentUserId: string
   onCreateEvent: () => void
   onEditEvent: (event: EventResponse) => void
 }
@@ -33,12 +34,15 @@ interface CachedPage {
   hasMore: boolean
 }
 
-export function HomePage({ onCreateEvent, onEditEvent }: HomePageProps) {
+export function HomePage({ currentUserId, onCreateEvent, onEditEvent }: HomePageProps) {
   const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState<EventFilter>({})
   const [currentData, setCurrentData] = useState<CachedPage>({ data: [], hasMore: false })
   const cache = useRef<Map<string, CachedPage>>(new Map())
+  const [registrations, setRegistrations] = useState<Record<string, EventRegistrationResponse | null>>({})
+  const [actionBusy, setActionBusy] = useState<Record<string, boolean>>({})
+  const [actionError, setActionError] = useState<Record<string, string>>({})
 
   const loadPage = useCallback((p: number, f: EventFilter) => {
     const key = `${p}:${JSON.stringify(f)}`
@@ -70,6 +74,47 @@ export function HomePage({ onCreateEvent, onEditEvent }: HomePageProps) {
   }
 
   const events = currentData.data
+
+  useEffect(() => {
+    events.forEach((event) => {
+      if (event.organizer_id === currentUserId) return
+      fetchMyRegistration(event.id).then((reg) => {
+        setRegistrations((prev) => ({ ...prev, [event.id]: reg }))
+      })
+    })
+  }, [events, currentUserId])
+
+  const handleJoin = (eventId: string) => {
+    setActionBusy((prev) => ({ ...prev, [eventId]: true }))
+    setActionError((prev) => ({ ...prev, [eventId]: '' }))
+    joinEvent(eventId)
+      .then((res) => {
+        setRegistrations((prev) => ({ ...prev, [eventId]: res.registration }))
+        cache.current.clear()
+        setCurrentData((prev) => ({
+          ...prev,
+          data: prev.data.map((e) => (e.id === eventId ? res.event : e)),
+        }))
+      })
+      .catch((err: Error) => setActionError((prev) => ({ ...prev, [eventId]: err.message })))
+      .finally(() => setActionBusy((prev) => ({ ...prev, [eventId]: false })))
+  }
+
+  const handleLeave = (eventId: string) => {
+    setActionBusy((prev) => ({ ...prev, [eventId]: true }))
+    setActionError((prev) => ({ ...prev, [eventId]: '' }))
+    leaveEvent(eventId)
+      .then((res) => {
+        setRegistrations((prev) => ({ ...prev, [eventId]: null }))
+        cache.current.clear()
+        setCurrentData((prev) => ({
+          ...prev,
+          data: prev.data.map((e) => (e.id === eventId ? res.event : e)),
+        }))
+      })
+      .catch((err: Error) => setActionError((prev) => ({ ...prev, [eventId]: err.message })))
+      .finally(() => setActionBusy((prev) => ({ ...prev, [eventId]: false })))
+  }
 
   return (
     <div className="page">
@@ -108,8 +153,33 @@ export function HomePage({ onCreateEvent, onEditEvent }: HomePageProps) {
                 <span>${Number(event.price).toFixed(2)}</span>
               </div>
               <div className="event-actions">
-                <button className="btn-secondary btn-sm" onClick={() => onEditEvent(event)}>Edit</button>
+                {event.organizer_id === currentUserId ? (
+                  <button className="btn-secondary btn-sm" onClick={() => onEditEvent(event)}>Edit</button>
+                ) : registrations[event.id] ? (
+                  <button
+                    className="btn-secondary btn-sm"
+                    disabled={actionBusy[event.id]}
+                    onClick={() => handleLeave(event.id)}
+                  >
+                    {actionBusy[event.id] ? 'Leaving...' : 'Leave'}
+                  </button>
+                ) : (
+                  <button
+                    className="btn-primary btn-sm"
+                    disabled={actionBusy[event.id] || event.status !== 'OPEN' || event.registered_count >= event.capacity}
+                    onClick={() => handleJoin(event.id)}
+                  >
+                    {actionBusy[event.id]
+                      ? 'Joining...'
+                      : event.registered_count >= event.capacity
+                        ? 'Full'
+                        : Number(event.price) > 0
+                          ? `Join · $${Number(event.price).toFixed(2)}`
+                          : 'Join'}
+                  </button>
+                )}
               </div>
+              {actionError[event.id] && <p className="event-action-error">{actionError[event.id]}</p>}
             </div>
           ))}
         </div>

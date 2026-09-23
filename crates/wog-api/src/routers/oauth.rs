@@ -19,7 +19,7 @@ use crate::errors::RestApiError;
 /// Attach the standard set of auth cookies (access/refresh token, lang,
 /// timestamp) onto a response. Shared by every endpoint that issues or
 /// rotates a token pair, so the cookie shape stays identical everywhere.
-fn apply_auth_cookies(response: &mut Response, token_pair: &TokenPair, cfg: &DefaultConfig) {
+pub(crate) fn apply_auth_cookies(response: &mut Response, token_pair: &TokenPair, cfg: &DefaultConfig) {
     let access_cookie = format!(
         "token={}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age={}",
         token_pair.access_token,

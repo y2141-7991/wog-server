@@ -7,8 +7,9 @@ use tracing::instrument;
 use uuid::Uuid;
 use wog_config::{
     event::dto::{
-        EventCreateRequest, EventListRequest, EventListResponse, EventResponse,
-        create_from_req_to_domain, update_from_req_to_domain,
+        EventCreateRequest, EventListRequest, EventListResponse, EventRegistrationActionResponse,
+        EventRegistrationResponse, EventResponse, create_from_req_to_domain,
+        update_from_req_to_domain,
     },
     model::PaginateResponse,
 };
@@ -102,4 +103,90 @@ pub async fn update_event(
         .update_event(update_from_req_to_domain(payload), event_id)
         .await?;
     Ok(Json(event.into()))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/events/{id}/join",
+    tag = "Event",
+    responses(
+        (status = 200, description = "Join event", body = EventRegistrationActionResponse),
+        (status = 400, description = "Event not open or insufficient balance", body = RestApiResponseError),
+        (status = 401, description = "Unauthorized", body = RestApiResponseError),
+        (status = 409, description = "Event full or already registered", body = RestApiResponseError),
+        (status = 500, description = "Internal error", body = RestApiResponseError),
+    ),
+    security(("bearer_auth" = []))
+)]
+#[axum::debug_handler]
+#[instrument(skip(state, claims), fields(event_id = %event_id))]
+pub async fn join_event(
+    State(state): State<AppState>,
+    AuthClaims(claims): AuthClaims,
+    Path(event_id): Path<Uuid>,
+) -> Result<Json<EventRegistrationActionResponse>, RestApiError> {
+    let (registration, event, wallet) = state
+        .event_registration_services
+        .join_event(event_id, claims.sub)
+        .await?;
+    Ok(Json(EventRegistrationActionResponse::new(
+        registration,
+        event,
+        wallet,
+    )))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/events/{id}/leave",
+    tag = "Event",
+    responses(
+        (status = 200, description = "Leave event", body = EventRegistrationActionResponse),
+        (status = 401, description = "Unauthorized", body = RestApiResponseError),
+        (status = 404, description = "Registration not found", body = RestApiResponseError),
+        (status = 500, description = "Internal error", body = RestApiResponseError),
+    ),
+    security(("bearer_auth" = []))
+)]
+#[axum::debug_handler]
+#[instrument(skip(state, claims), fields(event_id = %event_id))]
+pub async fn leave_event(
+    State(state): State<AppState>,
+    AuthClaims(claims): AuthClaims,
+    Path(event_id): Path<Uuid>,
+) -> Result<Json<EventRegistrationActionResponse>, RestApiError> {
+    let (registration, event, wallet) = state
+        .event_registration_services
+        .leave_event(event_id, claims.sub)
+        .await?;
+    Ok(Json(EventRegistrationActionResponse::new(
+        registration,
+        event,
+        wallet,
+    )))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/events/{id}/registration",
+    tag = "Event",
+    responses(
+        (status = 200, description = "Get my registration for this event", body = Option<EventRegistrationResponse>),
+        (status = 401, description = "Unauthorized", body = RestApiResponseError),
+        (status = 500, description = "Internal error", body = RestApiResponseError),
+    ),
+    security(("bearer_auth" = []))
+)]
+#[axum::debug_handler]
+#[instrument(skip(state, claims), fields(event_id = %event_id))]
+pub async fn get_my_registration(
+    State(state): State<AppState>,
+    AuthClaims(claims): AuthClaims,
+    Path(event_id): Path<Uuid>,
+) -> Result<Json<Option<EventRegistrationResponse>>, RestApiError> {
+    let registration = state
+        .event_registration_services
+        .get_my_registration(event_id, claims.sub)
+        .await?;
+    Ok(Json(registration.map(Into::into)))
 }

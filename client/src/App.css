@@ -147,6 +147,116 @@
   border-radius: 8px;
 }
 
+/* Verify-email banner */
+.verify-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  font-size: 0.875rem;
+  text-align: center;
+  flex-wrap: wrap;
+}
+
+.verify-banner-sent {
+  color: #4ade80;
+}
+
+.verify-sent {
+  color: #4ade80;
+}
+
+/* Auth (login/register) */
+.auth-card {
+  width: 100%;
+  max-width: 360px;
+}
+
+.auth-card h2 {
+  text-align: center;
+}
+
+.password-field {
+  position: relative;
+  width: 100%;
+}
+
+.password-field input {
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 3.5rem;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 0.35rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.3rem;
+  background: none;
+  border: none;
+  color: #aaa;
+  line-height: 0;
+}
+
+.password-toggle:hover {
+  color: #646cff;
+}
+
+.auth-submit {
+  align-self: center;
+  min-width: 140px;
+}
+
+.auth-switch {
+  margin: 1rem 0 0;
+  text-align: center;
+  font-size: 0.875rem;
+  color: #aaa;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #646cff;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  color: #535bf2;
+  border-color: transparent;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 360px;
+  color: #888;
+  font-size: 0.8rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.auth-divider span {
+  padding: 0 0.75rem;
+}
+
 /* Google button */
 .google-btn {
   display: flex;
@@ -165,6 +275,43 @@
 .google-btn:hover {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   border-color: #dadce0;
+}
+
+/* Wallet card (profile page) */
+.wallet-card {
+  width: 100%;
+  max-width: 420px;
+  margin: 1.5rem auto 0;
+}
+
+.wallet-balance {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin: 0.25rem 0 1.25rem;
+}
+
+.wallet-transfer h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.wallet-transfer {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.wallet-hint {
+  font-size: 0.8rem;
+  color: #aaa;
+  margin: 0 0 0.75rem;
+}
+
+.wallet-hint code {
+  word-break: break-all;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
 }
 
 /* Page header */
@@ -471,6 +618,30 @@
 
 .btn-secondary:hover {
   border-color: rgba(255, 255, 255, 0.3);
+}
+
+.btn-primary {
+  background: #646cff;
+  border: 1px solid transparent;
+  color: #fff;
+  font-weight: 500;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #535bf2;
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.event-action-error {
+  color: #ef4444;
+  font-size: 0.8rem;
+  text-align: right;
+  margin: 0.35rem 0 0;
 }
 
 @media (prefers-color-scheme: light) {

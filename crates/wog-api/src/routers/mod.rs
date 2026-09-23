@@ -13,6 +13,7 @@ use crate::routers::oauth::{
 pub mod event;
 pub mod oauth;
 pub mod user;
+pub mod wallet;
 
 pub fn user_routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new().routes(routes!(user::get_profile))
@@ -36,4 +37,13 @@ pub fn event_routes() -> OpenApiRouter<AppState> {
         .routes(routes!(event::create_event))
         .routes(routes!(event::get_events))
         .routes(routes!(event::update_event))
+        .routes(routes!(event::join_event))
+        .routes(routes!(event::leave_event))
+        .routes(routes!(event::get_my_registration))
+}
+
+pub fn wallet_routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(wallet::get_wallet))
+        .routes(routes!(wallet::transfer_credits))
 }

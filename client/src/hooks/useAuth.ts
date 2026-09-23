@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react'
-import { fetchCurrentUser, getGoogleLoginUrl, logout as logoutApi } from '../api/auth'
+import {
+  fetchCurrentUser,
+  getGoogleLoginUrl,
+  loginWithPassword as loginWithPasswordApi,
+  logout as logoutApi,
+  registerWithPassword as registerWithPasswordApi,
+  resendVerification as resendVerificationApi,
+  verifyEmail as verifyEmailApi,
+} from '../api/auth'
 import type { User } from '../types'
 
 export function useAuth() {
@@ -23,9 +31,37 @@ export function useAuth() {
     window.location.href = getGoogleLoginUrl()
   }
 
+  const loginWithPassword = async (email: string, password: string) => {
+    const loggedInUser = await loginWithPasswordApi(email, password)
+    setUser(loggedInUser)
+  }
+
+  const register = async (username: string, email: string, password: string) => {
+    const newUser = await registerWithPasswordApi(username, email, password)
+    setUser(newUser)
+  }
+
+  const verifyEmail = async (token: string) => {
+    const verifiedUser = await verifyEmailApi(token)
+    setUser(verifiedUser)
+    return verifiedUser
+  }
+
+  const resendVerification = () => resendVerificationApi()
+
   const logout = () => {
     logoutApi().then(() => setUser(null))
   }
 
-  return { user, loading, error, login, logout }
+  return {
+    user,
+    loading,
+    error,
+    login,
+    loginWithPassword,
+    register,
+    verifyEmail,
+    resendVerification,
+    logout,
+  }
 }

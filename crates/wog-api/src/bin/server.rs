@@ -20,8 +20,14 @@ use wog_config::user::dto::UserResponse;
 use wog_infras::{
     email::EmailService,
     get_config,
-    repos::{events::PgEventRepo, oauth::PgOAuthRepo, users::PgUserRepo},
-    services::{events::EventServices, oauth::OAuthServices, users::UserServices},
+    repos::{
+        event_registration::PgEventRegistrationRepo, events::PgEventRepo, oauth::PgOAuthRepo,
+        users::PgUserRepo, wallet::PgWalletRepo,
+    },
+    services::{
+        event_registration::EventRegistrationServices, events::EventServices,
+        oauth::OAuthServices, users::UserServices, wallet::WalletServices,
+    },
 };
 use wog_middleware::{
     AppState,
@@ -51,11 +57,15 @@ async fn main() -> anyhow::Result<()> {
     let event_repo = Arc::new(PgEventRepo::new(app_config.pool.clone()));
     let user_repo = Arc::new(PgUserRepo::new(app_config.pool.clone()));
     let oauth_repo = Arc::new(PgOAuthRepo::new(app_config.pool.clone(), "google"));
+    let wallet_repo = Arc::new(PgWalletRepo::new(app_config.pool.clone()));
+    let event_registration_repo = Arc::new(PgEventRegistrationRepo::new(app_config.pool.clone()));
 
-    let user_services = UserServices::new(user_repo);
+    let user_services = UserServices::new(user_repo.clone());
     let oauth_services = OAuthServices::new(oauth_repo);
     let event_services = EventServices::new(event_repo);
     let email_service = EmailService::new(&app_config.default_config);
+    let wallet_services = WalletServices::new(wallet_repo, user_repo);
+    let event_registration_services = EventRegistrationServices::new(event_registration_repo);
 
     let app_state = AppState {
         user_services,
@@ -63,6 +73,8 @@ async fn main() -> anyhow::Result<()> {
         app_config: app_config.clone(),
         event_services,
         email_service,
+        wallet_services,
+        event_registration_services,
     };
 
     let (api_router, openapi) = OpenApiRouter::<AppState>::with_openapi(ApiDoc::openapi())

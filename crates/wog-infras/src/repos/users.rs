@@ -70,6 +70,17 @@ impl UserRepository for PgUserRepo {
         .await?)
     }
 
+    async fn find_by_username(&self, username: &str) -> Result<Option<User>, DatabaseError> {
+        Ok(sqlx::query_as::<_, User>(
+            r#"
+                SELECT * FROM users WHERE username = $1
+            "#,
+        )
+        .bind(username)
+        .fetch_optional(&self.pg_pool)
+        .await?)
+    }
+
     async fn create_verification_token(
         &self,
         user_id: uuid::Uuid,

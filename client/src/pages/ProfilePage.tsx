@@ -1,3 +1,4 @@
+import { WalletCard } from '../components/WalletCard'
 import type { User } from '../types'
 
 interface ProfilePageProps {
@@ -14,6 +15,8 @@ export function ProfilePage({ user, onLogout }: ProfilePageProps) {
         <p className="user-id">ID: {user.id}</p>
         <button onClick={onLogout}>Sign out</button>
       </div>
+
+      <WalletCard />
     </div>
   )
 }
