@@ -1,0 +1,25 @@
+// Contract between the WoG marketplace gateway (client) and the crawler
+// service (server). Keep a copy of this file in sync with
+// social-track-pipeline/tiktok_gateway/crawler.proto.
+syntax = "proto3";
+
+package crawler.v1;
+
+import "google/protobuf/struct.proto";
+
+service Crawler {
+  // Run one crawl by name (`post`, `comments`, `search`, `profile-posts`) and
+  // return its normalized JSON result. The caller must send its shared secret
+  // in the `x-upstream-secret` metadata header.
+  //
+  // Status codes: INVALID_ARGUMENT bad params, NOT_FOUND unknown method,
+  // PERMISSION_DENIED TikTok content needs login, INTERNAL the TikTok request
+  // failed, UNAUTHENTICATED wrong secret, FAILED_PRECONDITION the server has
+  // no secret configured.
+  rpc Call(CallRequest) returns (google.protobuf.Struct);
+}
+
+message CallRequest {
+  string method = 1;
+  map<string, string> params = 2;
+}

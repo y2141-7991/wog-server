@@ -6,14 +6,14 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use wog_middleware::AppState;
 
 use crate::routers::oauth::{
-    auth_me, google_callback, google_login, login, logout, refresh_token, register,
+    auth_me, change_password, google_callback, google_login, login, logout, refresh_token, register,
     resend_verification, verify_email,
 };
 
-pub mod event;
+pub mod admin;
+pub mod marketplace;
 pub mod oauth;
 pub mod user;
-pub mod wallet;
 
 pub fn user_routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new().routes(routes!(user::get_profile))
@@ -29,21 +29,29 @@ pub fn oauth_routes() -> Router<AppState> {
         .route("/api/v1/auth/resend-verification", post(resend_verification))
         .route("/api/v1/auth/me", get(auth_me))
         .route("/api/v1/auth/refresh", post(refresh_token))
+        .route("/api/v1/auth/change-password", post(change_password))
         .route("/api/v1/auth/logout", post(logout))
 }
 
-pub fn event_routes() -> OpenApiRouter<AppState> {
+pub fn marketplace_routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
-        .routes(routes!(event::create_event))
-        .routes(routes!(event::get_events))
-        .routes(routes!(event::update_event))
-        .routes(routes!(event::join_event))
-        .routes(routes!(event::leave_event))
-        .routes(routes!(event::get_my_registration))
+        .routes(routes!(marketplace::list_apis))
+        .routes(routes!(marketplace::get_api))
+        .routes(routes!(marketplace::create_key, marketplace::list_keys))
+        .routes(routes!(marketplace::revoke_key))
+        .routes(routes!(marketplace::get_usage))
 }
 
-pub fn wallet_routes() -> OpenApiRouter<AppState> {
+/// The metered gateway, authenticated by `X-API-Key` instead of a session.
+pub fn gateway_routes() -> Router<AppState> {
+    Router::new().route("/gateway/v1/{provider}/{endpoint}", get(marketplace::gateway))
+}
+
+pub fn admin_routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
-        .routes(routes!(wallet::get_wallet))
-        .routes(routes!(wallet::transfer_credits))
+        .routes(routes!(admin::get_overview))
+        .routes(routes!(admin::list_users))
+        .routes(routes!(admin::get_user_usage))
+        .routes(routes!(admin::set_role))
+        .routes(routes!(admin::get_audit_log))
 }

@@ -13,8 +13,12 @@ CREATE TABLE IF NOT EXISTS users (
     email_verified  BOOLEAN      NOT NULL DEFAULT FALSE,
     oauth_provider  VARCHAR(20),
     oauth_sub       VARCHAR(255),
+    role            VARCHAR(20)  NOT NULL DEFAULT 'user',
+    must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT users_role_check CHECK (role IN ('user', 'admin'))
 );
 
 -- ══════════════════════════════════════════════════════════════
@@ -38,159 +42,136 @@ CREATE TABLE IF NOT EXISTS oauth_verifiers (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ══════════════════════════════════════════════════════════════
--- Chat Rooms
--- ══════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS rooms (
-    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name        VARCHAR(100) NOT NULL,
-    description TEXT,
-    is_private  BOOLEAN      NOT NULL DEFAULT FALSE,
-    owner_id    UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-);
-
--- ══════════════════════════════════════════════════════════════
--- Room Members (many-to-many)
--- ══════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS room_members (
-    room_id     UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role        VARCHAR(20)  NOT NULL DEFAULT 'member',
-    joined_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (room_id, user_id)
-);
-
--- ══════════════════════════════════════════════════════════════
--- Messages
--- ══════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS messages (
-    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    room_id     UUID         NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-    sender_id   UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    content     TEXT         NOT NULL,
-    msg_type    VARCHAR(20)  NOT NULL DEFAULT 'text',
-    is_edited   BOOLEAN      NOT NULL DEFAULT FALSE,
-    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-);
-
--- ══════════════════════════════════════════════════════════════
--- Wallets — one per user
--- ══════════════════════════════════════════════════════════════
---
--- `version` column = optimistic lock
--- Every UPDATE must include: WHERE version = <expected_version>
--- If two requests try to spend simultaneously:
---   Request A: UPDATE ... SET version = 3 WHERE version = 2  ← succeeds
---   Request B: UPDATE ... SET version = 3 WHERE version = 2  ← 0 rows affected → retry or fail
---
-CREATE TABLE IF NOT EXISTS wallets (
-    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id     UUID         NOT NULL UNIQUE REFERENCES users(id),
-    balance     DECIMAL(18,2) NOT NULL DEFAULT 0.00,
-    version     BIGINT       NOT NULL DEFAULT 0,
-    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-
-    CONSTRAINT positive_balance CHECK (balance >= 0)
-);
-
--- ══════════════════════════════════════════════════════════════
--- Wallet Transactions — append-only ledger
--- ══════════════════════════════════════════════════════════════
---
--- Every balance change MUST have a corresponding transaction.
--- This is the audit trail / source of truth.
---
--- Types:
---   EVENT_JOIN    -amount  (user pays to join event)
---   REFUND        +amount  (user gets money back)
---   TRANSFER_OUT  -amount  (user sends credits to another user)
---   TRANSFER_IN   +amount  (user receives credits from another user)
---
-CREATE TABLE IF NOT EXISTS wallet_transactions (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    wallet_id       UUID         NOT NULL REFERENCES wallets(id),
-    tx_type         VARCHAR(20)  NOT NULL,
-    amount          DECIMAL(18,2) NOT NULL,
-    balance_before  DECIMAL(18,2) NOT NULL,
-    balance_after   DECIMAL(18,2) NOT NULL,
-    reference_type  VARCHAR(20),          -- 'event_registration', 'transfer', null for adjustments
-    reference_id    UUID,                 -- event_registration.id, transfer ref, null for adjustments
-    description     TEXT,
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-
-    CONSTRAINT positive_amount CHECK (amount > 0),
-    CONSTRAINT valid_tx_type CHECK (
-        tx_type IN ('EVENT_JOIN', 'REFUND', 'TRANSFER_OUT', 'TRANSFER_IN')
-    )
-);
-
--- ══════════════════════════════════════════════════════════════
--- Events
--- ══════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS events (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    title           VARCHAR(200) NOT NULL,
-    description     TEXT,
-    organizer_id    UUID         NOT NULL REFERENCES users(id),
-    price           DECIMAL(18,2) NOT NULL DEFAULT 0.00,
-    capacity        INT          NOT NULL DEFAULT 100,
-    registered_count INT         NOT NULL DEFAULT 0,
-    status          VARCHAR(20)  NOT NULL DEFAULT 'OPEN',
-    start_time      TIMESTAMPTZ  NOT NULL,
-    end_time        TIMESTAMPTZ  NOT NULL,
-    location        TEXT,
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-
-    CONSTRAINT positive_price CHECK (price >= 0),
-    CONSTRAINT positive_capacity CHECK (capacity > 0),
-    CONSTRAINT valid_time CHECK (end_time > start_time),
-    CONSTRAINT valid_status CHECK (
-        status IN ('DRAFT', 'OPEN', 'CLOSED', 'CANCELLED')
-    )
-);
-
--- ══════════════════════════════════════════════════════════════
--- Event Registrations — join table
--- ══════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS event_registrations (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    event_id        UUID         NOT NULL REFERENCES events(id),
-    user_id         UUID         NOT NULL REFERENCES users(id),
-    wallet_tx_id    UUID         REFERENCES wallet_transactions(id),
-    amount_paid     DECIMAL(18,2) NOT NULL DEFAULT 0.00,
-    status          VARCHAR(20)  NOT NULL DEFAULT 'CONFIRMED',
-    registered_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    cancelled_at    TIMESTAMPTZ,
-
-    CONSTRAINT unique_registration UNIQUE (event_id, user_id),
-    CONSTRAINT valid_reg_status CHECK (
-        status IN ('CONFIRMED', 'CANCELLED', 'REFUNDED')
-    )
-);
-
--- ══════════════════════════════════════════════════════════════
--- Indexes
--- ══════════════════════════════════════════════════════════════
-CREATE INDEX IF NOT EXISTS idx_wallet_tx_wallet ON wallet_transactions(wallet_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_wallet_tx_ref    ON wallet_transactions(reference_type, reference_id);
-CREATE INDEX IF NOT EXISTS idx_events_status    ON events(status, start_time);
-CREATE INDEX IF NOT EXISTS idx_events_organizer ON events(organizer_id);
-CREATE INDEX IF NOT EXISTS idx_reg_event        ON event_registrations(event_id);
-CREATE INDEX IF NOT EXISTS idx_reg_user         ON event_registrations(user_id);
 
 CREATE INDEX IF NOT EXISTS idx_users_email       ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_username    ON users(username);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oauth
     ON users(oauth_provider, oauth_sub)
     WHERE oauth_provider IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS idx_messages_room     ON messages(room_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_messages_sender   ON messages(sender_id);
-CREATE INDEX IF NOT EXISTS idx_room_members_user ON room_members(user_id);
-
 CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_user  ON email_verification_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_token ON email_verification_tokens(token);
+
+-- ══════════════════════════════════════════════════════════════
+-- API marketplace: catalog, API keys, usage metering
+-- ══════════════════════════════════════════════════════════════
+
+-- Catalog of APIs sold through the gateway. `params` documents (and
+-- whitelists) the query parameters the gateway forwards upstream.
+CREATE TABLE IF NOT EXISTS apis (
+    id                     UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    slug                   VARCHAR(60)  NOT NULL UNIQUE,
+    name                   VARCHAR(120) NOT NULL,
+    description            TEXT         NOT NULL,
+    provider               VARCHAR(60)  NOT NULL,
+    category               VARCHAR(40)  NOT NULL DEFAULT 'Data',
+    gateway_path           VARCHAR(200) NOT NULL UNIQUE,
+    upstream_path          VARCHAR(200) NOT NULL,
+    params                 JSONB        NOT NULL DEFAULT '[]',
+    example_response       JSONB,
+    rate_limit_per_minute  INT          NOT NULL DEFAULT 30,
+    monthly_quota          INT          NOT NULL DEFAULT 1000,
+    enabled                BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at             TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at             TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT positive_rate_limit CHECK (rate_limit_per_minute > 0),
+    CONSTRAINT positive_monthly_quota CHECK (monthly_quota > 0)
+);
+
+-- Only the SHA-256 of a key is stored; the plaintext is shown once at creation.
+CREATE TABLE IF NOT EXISTS api_keys (
+    id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id       UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name          VARCHAR(100) NOT NULL,
+    key_prefix    VARCHAR(16)  NOT NULL,
+    key_hash      CHAR(64)     NOT NULL UNIQUE,
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    last_used_at  TIMESTAMPTZ,
+    revoked_at    TIMESTAMPTZ
+);
+
+-- One row per request forwarded upstream; drives quotas and the dashboard.
+CREATE TABLE IF NOT EXISTS api_usage (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    api_key_id  UUID        NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+    user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    api_id      UUID        NOT NULL REFERENCES apis(id) ON DELETE CASCADE,
+    status_code SMALLINT    NOT NULL,
+    latency_ms  INT         NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Every admin action that changes something, kept after the people involved
+-- are deleted (SET NULL), so the trail survives account removal.
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    actor_id        UUID REFERENCES users(id) ON DELETE SET NULL,
+    target_user_id  UUID REFERENCES users(id) ON DELETE SET NULL,
+    action          VARCHAR(50) NOT NULL,
+    old_value       TEXT,
+    new_value       TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_role          ON users(role);
+CREATE INDEX IF NOT EXISTS idx_api_usage_created   ON api_usage(created_at);
+CREATE INDEX IF NOT EXISTS idx_api_usage_api_time  ON api_usage(api_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_created       ON admin_audit_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_target        ON admin_audit_log(target_user_id);
+CREATE INDEX IF NOT EXISTS idx_api_keys_user       ON api_keys(user_id);
+CREATE INDEX IF NOT EXISTS idx_api_usage_user_time ON api_usage(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_api_usage_quota     ON api_usage(user_id, api_id, created_at);
+
+-- ══════════════════════════════════════════════════════════════
+-- Catalog seed: the four TikTok crawls the pipeline exposes
+-- ══════════════════════════════════════════════════════════════
+INSERT INTO apis (slug, name, description, provider, category, gateway_path, upstream_path, params, example_response, rate_limit_per_minute, monthly_quota) VALUES
+(
+  'tiktok-post',
+  'TikTok Post Details',
+  'Details and engagement stats (plays, likes, comments, shares) for a single TikTok video, plus its author.',
+  'TikTok',
+  'Social',
+  '/gateway/v1/tiktok/post',
+  '/v1/post',
+  '[{"name":"post_id","type":"string","required":true,"description":"Numeric TikTok video ID","example":"7656787492309552405"}]',
+  '{"id":"7656787492309552405","url":"https://www.tiktok.com/@user/video/7656787492309552405","description":"Caption #tag","created_at":"2026-06-30T02:00:00+00:00","stats":{"plays":25877,"likes":916,"comments":26,"shares":130},"cover_url":"https://...","author":{"id":"7111953329186292741","username":"user","nickname":"Display Name","followers":40742}}',
+  30, 1000
+),
+(
+  'tiktok-comments',
+  'TikTok Video Comments',
+  'Comments on a TikTok video with author, likes and reply counts, 20 per page. Pass next_cursor as cursor to get the next page.',
+  'TikTok',
+  'Social',
+  '/gateway/v1/tiktok/comments',
+  '/v1/comments',
+  '[{"name":"post_id","type":"string","required":true,"description":"Numeric TikTok video ID","example":"7656787492309552405"},{"name":"cursor","type":"string","required":false,"description":"Page position: the next_cursor of the previous response (omit for the first page)","example":"20"}]',
+  '{"post_id":"7656787492309552405","comments":[{"id":"7656790000000000001","text":"Nice clip","created_at":"2026-06-30T03:10:00+00:00","likes":12,"reply_count":1,"author":{"id":"6800000000000000000","username":"someone","nickname":"Someone"}}],"next_cursor":"20","has_more":true}',
+  10, 300
+),
+(
+  'tiktok-search',
+  'TikTok Search Posts',
+  'Search TikTok videos by keyword or hashtag, 10 posts per page. Pass next_cursor as cursor to get the next page.',
+  'TikTok',
+  'Social',
+  '/gateway/v1/tiktok/search',
+  '/v1/search',
+  '[{"name":"keyword","type":"string","required":true,"description":"Keyword or #hashtag to search","example":"#CS2"},{"name":"cursor","type":"string","required":false,"description":"Page position: the next_cursor of the previous response (omit for the first page)","example":"10"}]',
+  '{"keyword":"#CS2","posts":[{"id":"7656787492309552405","url":"https://www.tiktok.com/@user/video/7656787492309552405","description":"Caption #CS2","created_at":"2026-06-30T02:00:00+00:00","stats":{"plays":25877,"likes":916,"comments":26,"shares":130},"cover_url":"https://...","author":{"id":"7111953329186292741","username":"user","nickname":"Display Name","followers":40742}}],"next_cursor":"10","has_more":true}',
+  10, 300
+),
+(
+  'tiktok-profile-posts',
+  'TikTok Profile Posts',
+  'Recent videos published by a TikTok account, looked up by its numeric user ID.',
+  'TikTok',
+  'Social',
+  '/gateway/v1/tiktok/profile-posts',
+  '/v1/profile-posts',
+  '[{"name":"user_id","type":"string","required":true,"description":"Numeric TikTok user ID (the author.id of any post)","example":"107955"}]',
+  '{"user_id":"107955","posts":[{"id":"7647151424366824725","url":"https://www.tiktok.com/@tiktok/video/7647151424366824725","description":"Caption","created_at":"2026-06-04T10:30:00+00:00","stats":{"plays":772962,"likes":25348,"comments":250,"shares":651},"cover_url":"https://...","author":{"id":"107955","username":"tiktok","nickname":"TikTok","followers":90000000}}]}',
+  10, 300
+)
+ON CONFLICT (slug) DO NOTHING;

@@ -1,6 +1,6 @@
 # WoG Server
 
-Event management platform built with Rust (Axum) and React.
+API marketplace built with Rust (Axum) and React: sign up, get an API key, and call metered APIs through the gateway.
 
 ## Tech Stack
 
@@ -57,3 +57,17 @@ The API runs on `http://localhost:3000` and the client on `http://localhost:5173
 ## API Docs
 
 Visit `http://localhost:3000/scalar` for the interactive API documentation.
+
+## API Marketplace (TikTok data)
+
+WoG exposes a metered gateway at `GET /gateway/v1/tiktok/{post,comments,search,profile-posts}`
+authenticated with an `X-API-Key` header (keys are created on the dashboard page).
+Calls are forwarded over gRPC to the `tiktok_gateway` service in `social-track-pipeline`
+(`python -m tiktok_gateway.server`, same env as the Celery workers). The contract is
+`crates/wog-infras/proto/crawler.proto`; keep it in sync with
+`social-track-pipeline/tiktok_gateway/crawler.proto`.
+
+Set the same secret on both sides:
+
+- WoG `.env`: `UPSTREAM_URL=http://127.0.0.1:50051` and `UPSTREAM_SECRET=<random string>`
+- gateway env: `UPSTREAM_SECRET=<the same string>` (and optionally `GRPC_ADDR`, default `127.0.0.1:50051`)

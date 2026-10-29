@@ -3,6 +3,7 @@ import {
   fetchCurrentUser,
   getGoogleLoginUrl,
   loginWithPassword as loginWithPasswordApi,
+  changePassword as changePasswordApi,
   logout as logoutApi,
   registerWithPassword as registerWithPasswordApi,
   resendVerification as resendVerificationApi,
@@ -49,6 +50,10 @@ export function useAuth() {
 
   const resendVerification = () => resendVerificationApi()
 
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    setUser(await changePasswordApi(currentPassword, newPassword))
+  }
+
   const logout = () => {
     logoutApi().then(() => setUser(null))
   }
@@ -62,6 +67,7 @@ export function useAuth() {
     register,
     verifyEmail,
     resendVerification,
+    changePassword,
     logout,
   }
 }

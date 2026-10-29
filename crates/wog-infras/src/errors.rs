@@ -22,18 +22,12 @@ pub enum DatabaseError {
     InvalidCredentials,
     #[error("Invalid or expired verification link")]
     InvalidVerificationToken,
-    #[error("This event is not open for registration")]
-    EventNotOpen,
-    #[error("This event has reached full capacity")]
-    EventFull,
-    #[error("Insufficient wallet balance")]
-    InsufficientBalance,
-    #[error("You are already registered for this event")]
-    AlreadyRegistered,
-    #[error("Registration not found")]
-    RegistrationNotFound,
-    #[error("You cannot join your own event")]
-    CannotJoinOwnEvent,
+    #[error("Invalid or revoked API key")]
+    InvalidApiKey,
+    #[error("{0}")]
+    RateLimited(String),
+    #[error("{0}")]
+    UpstreamFailure(String),
     #[error("An unknown error occurred: {0}")]
     Others(String),
 }

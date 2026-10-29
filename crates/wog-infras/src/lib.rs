@@ -1,3 +1,4 @@
+pub mod crawler;
 pub mod email;
 pub mod errors;
 pub mod models;
@@ -72,6 +73,14 @@ pub struct DefaultConfig {
     pub smtp_from_name: String,
     #[envconfig(from = "EMAIL_VERIFICATION_EXPIRE_HOURS", default = "24")]
     pub email_verification_expire_hours: i64,
+    /// gRPC address of the crawler service the gateway forwards to
+    /// (social-track-pipeline's `tiktok_gateway`).
+    #[envconfig(from = "UPSTREAM_URL", default = "http://127.0.0.1:50051")]
+    pub upstream_url: String,
+    /// Shared secret sent as `x-upstream-secret` metadata so only this gateway
+    /// can call the crawler. Calls fail until it matches the upstream's.
+    #[envconfig(from = "UPSTREAM_SECRET", default = "")]
+    pub upstream_secret: String,
 }
 
 #[derive(Clone)]

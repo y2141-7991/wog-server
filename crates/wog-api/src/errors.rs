@@ -46,6 +46,12 @@ pub enum RestApiError {
     #[error("{0}")]
     Conflict(String),
 
+    #[error("{0}")]
+    TooManyRequests(String),
+
+    #[error("{0}")]
+    BadGateway(String),
+
     #[error("Database error: {0}")]
     Database(String),
 
@@ -61,6 +67,8 @@ impl IntoResponse for RestApiError {
             RestApiError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),
             RestApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
             RestApiError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
+            RestApiError::TooManyRequests(msg) => (StatusCode::TOO_MANY_REQUESTS, msg.clone()),
+            RestApiError::BadGateway(msg) => (StatusCode::BAD_GATEWAY, msg.clone()),
             RestApiError::Database(e) => {
                 tracing::error!("Database error: {:?}", e);
                 (
@@ -100,24 +108,11 @@ impl From<DatabaseError> for RestApiError {
                 RestApiError::BadRequest("Invalid or expired verification link".into())
             }
             DatabaseError::ValidationError(msg) => RestApiError::BadRequest(msg),
-            DatabaseError::EventNotOpen => {
-                RestApiError::BadRequest("This event is not open for registration".into())
+            DatabaseError::InvalidApiKey => {
+                RestApiError::Unauthorized("Invalid or revoked API key".into())
             }
-            DatabaseError::EventFull => {
-                RestApiError::Conflict("This event has reached full capacity".into())
-            }
-            DatabaseError::InsufficientBalance => {
-                RestApiError::BadRequest("Insufficient wallet balance".into())
-            }
-            DatabaseError::AlreadyRegistered => {
-                RestApiError::Conflict("You are already registered for this event".into())
-            }
-            DatabaseError::RegistrationNotFound => {
-                RestApiError::NotFound("Registration not found".into())
-            }
-            DatabaseError::CannotJoinOwnEvent => {
-                RestApiError::BadRequest("You cannot join your own event".into())
-            }
+            DatabaseError::RateLimited(msg) => RestApiError::TooManyRequests(msg),
+            DatabaseError::UpstreamFailure(msg) => RestApiError::BadGateway(msg),
             _ => RestApiError::Database(value.to_string()),
         }
     }

@@ -15,18 +15,21 @@ use tracing_subscriber::{EnvFilter, fmt};
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_scalar::{Scalar, Servable};
-use wog_api::{api_routes, routers::oauth_routes};
+use wog_api::{
+    api_routes,
+    routers::{gateway_routes, oauth_routes},
+};
 use wog_config::user::dto::UserResponse;
 use wog_infras::{
+    crawler::Crawler,
     email::EmailService,
     get_config,
     repos::{
-        event_registration::PgEventRegistrationRepo, events::PgEventRepo, oauth::PgOAuthRepo,
-        users::PgUserRepo, wallet::PgWalletRepo,
+        admin::PgAdminRepo, marketplace::PgMarketplaceRepo, oauth::PgOAuthRepo, users::PgUserRepo,
     },
     services::{
-        event_registration::EventRegistrationServices, events::EventServices,
-        oauth::OAuthServices, users::UserServices, wallet::WalletServices,
+        admin::AdminServices, marketplace::MarketplaceServices, oauth::OAuthServices,
+        users::UserServices,
     },
 };
 use wog_middleware::{
@@ -54,27 +57,37 @@ async fn main() -> anyhow::Result<()> {
         .await?;
     tracing::info!("Migrations complete");
 
-    let event_repo = Arc::new(PgEventRepo::new(app_config.pool.clone()));
     let user_repo = Arc::new(PgUserRepo::new(app_config.pool.clone()));
     let oauth_repo = Arc::new(PgOAuthRepo::new(app_config.pool.clone(), "google"));
-    let wallet_repo = Arc::new(PgWalletRepo::new(app_config.pool.clone()));
-    let event_registration_repo = Arc::new(PgEventRegistrationRepo::new(app_config.pool.clone()));
+    let marketplace_repo = Arc::new(PgMarketplaceRepo::new(app_config.pool.clone()));
+    let admin_repo = Arc::new(PgAdminRepo::new(app_config.pool.clone()));
 
-    let user_services = UserServices::new(user_repo.clone());
+    let user_services = UserServices::new(user_repo);
     let oauth_services = OAuthServices::new(oauth_repo);
-    let event_services = EventServices::new(event_repo);
     let email_service = EmailService::new(&app_config.default_config);
-    let wallet_services = WalletServices::new(wallet_repo, user_repo);
-    let event_registration_services = EventRegistrationServices::new(event_registration_repo);
+    let crawler = Crawler::new(
+        &app_config.default_config.upstream_url,
+        &app_config.default_config.upstream_secret,
+    )?;
+    let admin_services = AdminServices::new(admin_repo, marketplace_repo.clone());
+    let marketplace_services = MarketplaceServices::new(marketplace_repo, crawler);
+
+    match admin_services.bootstrap_admin().await {
+        Ok(Some(admin)) => tracing::warn!(
+            username = %admin.username,
+            "Created the default admin (username 'admin', password 'admin'); change the password after signing in"
+        ),
+        Ok(None) => tracing::debug!("An admin already exists; skipping the admin bootstrap"),
+        Err(err) => tracing::warn!(%err, "Skipped the default admin bootstrap"),
+    }
 
     let app_state = AppState {
         user_services,
         oauth_services,
         app_config: app_config.clone(),
-        event_services,
         email_service,
-        wallet_services,
-        event_registration_services,
+        marketplace_services,
+        admin_services,
     };
 
     let (api_router, openapi) = OpenApiRouter::<AppState>::with_openapi(ApiDoc::openapi())
@@ -104,6 +117,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .merge(Scalar::with_url("/scalar", openapi.clone()))
         .merge(oauth_routes())
+        .merge(gateway_routes())
         .merge(api_router)
         .layer(axum::middleware::from_fn(rate_limit_middleware))
         .layer(axum::Extension(rate_limiter))

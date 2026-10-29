@@ -1,22 +1,23 @@
-import { WalletCard } from '../components/WalletCard'
 import type { User } from '../types'
 
 interface ProfilePageProps {
   user: User
   onLogout: () => void
+  onChangePassword: () => void
 }
 
-export function ProfilePage({ user, onLogout }: ProfilePageProps) {
+export function ProfilePage({ user, onLogout, onChangePassword }: ProfilePageProps) {
   return (
     <div className="container">
       <div className="profile">
-        <h1>Welcome, {user.username}</h1>
+        <h2>{user.username}</h2>
         {user.avatar_url && <img src={user.avatar_url} alt={user.username} />}
-        <p className="user-id">ID: {user.id}</p>
-        <button onClick={onLogout}>Sign out</button>
+        <p className="text-muted">{user.email}</p>
+        <div className="profile-actions">
+          <button className="btn-secondary" onClick={onChangePassword}>Change password</button>
+          <button className="btn-secondary" onClick={onLogout}>Sign out</button>
+        </div>
       </div>
-
-      <WalletCard />
     </div>
   )
 }

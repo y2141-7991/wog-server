@@ -8,6 +8,7 @@ const LOGOUT_URL = `${API}/api/v1/auth/logout`
 const LOGIN_URL = `${API}/api/v1/auth/login`
 const REGISTER_URL = `${API}/api/v1/auth/register`
 const VERIFY_EMAIL_URL = `${API}/api/v1/auth/verify-email`
+const CHANGE_PASSWORD_URL = `${API}/api/v1/auth/change-password`
 const RESEND_VERIFICATION_URL = `${API}/api/v1/auth/resend-verification`
 
 interface AuthResponse {
@@ -81,4 +82,18 @@ export async function resendVerification(): Promise<void> {
   if (!res.ok) {
     throw new Error(body.message || 'Could not send verification email')
   }
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<User> {
+  const res = await fetch(CHANGE_PASSWORD_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    credentials: 'include',
+  })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(body.message || 'Could not change the password')
+  }
+  return body as User
 }

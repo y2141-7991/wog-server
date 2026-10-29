@@ -7,7 +7,9 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
 };
 use serde_json::json;
-use wog_config::user::dto::{LoginRequest, RegisterRequest, UserResponse, VerifyEmailRequest};
+use wog_config::user::dto::{
+    ChangePasswordRequest, LoginRequest, RegisterRequest, UserResponse, VerifyEmailRequest,
+};
 use wog_middleware::{AppState, AuthClaims};
 
 use axum_extra::extract::CookieJar;
@@ -247,6 +249,20 @@ pub async fn login(
     );
 
     Ok(response)
+}
+
+/// Change the signed-in user's password. This is also how a bootstrapped
+/// admin clears `must_change_password`.
+pub async fn change_password(
+    State(state): State<AppState>,
+    AuthClaims(claims): AuthClaims,
+    Json(payload): Json<ChangePasswordRequest>,
+) -> Result<Json<UserResponse>, RestApiError> {
+    let user = state
+        .user_services
+        .change_password(claims.sub, &payload.current_password, &payload.new_password)
+        .await?;
+    Ok(Json(user.into()))
 }
 
 pub async fn auth_me(

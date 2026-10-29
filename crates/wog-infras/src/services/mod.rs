@@ -1,5 +1,4 @@
-pub mod event_registration;
-pub mod events;
+pub mod admin;
+pub mod marketplace;
 pub mod oauth;
 pub mod users;
-pub mod wallet;

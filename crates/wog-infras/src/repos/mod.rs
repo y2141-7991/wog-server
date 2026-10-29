@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use sqlx::QueryBuilder;
 use uuid::Uuid;
 
 use chrono::{DateTime, Utc};
@@ -9,23 +8,21 @@ use chrono::{DateTime, Utc};
 use crate::{
     errors::DatabaseError,
     models::{
-        EmailVerificationToken, Event, EventFilter, EventNew, EventRegistration, EventUpdate,
-        PaginateVec, PaginationRequest, User, Wallet,
+        AdminApiUsage, AdminTotals, AdminUserUsage, Api, ApiKey, ApiUsageByApi, ApiUsageByDay,
+        AuditLogEntry, EmailVerificationToken, User,
     },
     repos::oauth::OAuthConnection,
 };
 
-pub mod event_registration;
-pub mod events;
+pub mod admin;
+pub mod marketplace;
 pub mod oauth;
 pub mod users;
-pub mod wallet;
 
 pub type DynUserRepository = Arc<dyn UserRepository + Send + Sync>;
 pub type DynOAuthRepository = Arc<dyn OAuthRepository + Send + Sync>;
-pub type DynEventRepository = Arc<dyn EventRepository + Send + Sync>;
-pub type DynWalletRepository = Arc<dyn WalletRepository + Send + Sync>;
-pub type DynEventRegistrationRepository = Arc<dyn EventRegistrationRepository + Send + Sync>;
+pub type DynAdminRepository = Arc<dyn AdminRepository + Send + Sync>;
+pub type DynMarketplaceRepository = Arc<dyn MarketplaceRepository + Send + Sync>;
 
 #[async_trait]
 pub trait UserRepository {
@@ -58,6 +55,9 @@ pub trait UserRepository {
     async fn delete_verification_token(&self, token: &str) -> Result<(), DatabaseError>;
 
     async fn mark_email_verified(&self, user_id: Uuid) -> Result<User, DatabaseError>;
+
+    /// Store a new password hash and clear the forced-change flag.
+    async fn update_password(&self, user_id: Uuid, hash_pwd: &str) -> Result<User, DatabaseError>;
 }
 
 #[async_trait]
@@ -84,85 +84,87 @@ pub trait OAuthRepository {
 }
 
 #[async_trait]
-pub trait WalletRepository {
-    async fn get_or_create_wallet(&self, user_id: Uuid) -> Result<Wallet, DatabaseError>;
+pub trait MarketplaceRepository {
+    async fn list_apis(&self) -> Result<Vec<Api>, DatabaseError>;
 
-    /// Move `amount` credits directly from `sender_id`'s wallet to
-    /// `recipient_id`'s wallet -- a purely in-app ledger change, with no
-    /// on-chain activity involved. Fails with `DatabaseError::InsufficientBalance`
-    /// if the sender doesn't have enough. `sender_description` and
-    /// `recipient_description` are recorded on each side's own
-    /// `wallet_transactions` row.
-    async fn transfer_credits(
+    async fn find_api_by_slug(&self, slug: &str) -> Result<Option<Api>, DatabaseError>;
+
+    async fn find_api_by_gateway_path(&self, path: &str) -> Result<Option<Api>, DatabaseError>;
+
+    async fn create_key(
         &self,
-        sender_id: Uuid,
-        recipient_id: Uuid,
-        amount: rust_decimal::Decimal,
-        sender_description: &str,
-        recipient_description: &str,
-    ) -> Result<(Wallet, Wallet), DatabaseError>;
+        user_id: Uuid,
+        name: &str,
+        key_prefix: &str,
+        key_hash: &str,
+    ) -> Result<ApiKey, DatabaseError>;
+
+    async fn list_keys(&self, user_id: Uuid) -> Result<Vec<ApiKey>, DatabaseError>;
+
+    /// Revoke one of `user_id`'s own keys. `ValueNotFound` if it isn't theirs
+    /// or is already revoked.
+    async fn revoke_key(&self, user_id: Uuid, key_id: Uuid) -> Result<(), DatabaseError>;
+
+    /// The key with this hash, only if it has not been revoked.
+    async fn find_active_key_by_hash(&self, key_hash: &str) -> Result<Option<ApiKey>, DatabaseError>;
+
+    /// Log a request forwarded upstream and stamp the key's `last_used_at`.
+    async fn record_usage(
+        &self,
+        key: &ApiKey,
+        api_id: Uuid,
+        status_code: i16,
+        latency_ms: i32,
+    ) -> Result<(), DatabaseError>;
+
+    /// Billable requests (upstream did not 5xx) `user_id` has made to `api_id`
+    /// since the start of this UTC month.
+    async fn count_usage_this_month(&self, user_id: Uuid, api_id: Uuid) -> Result<i64, DatabaseError>;
+
+    async fn usage_by_api(&self, user_id: Uuid, days: i32) -> Result<Vec<ApiUsageByApi>, DatabaseError>;
+
+    async fn usage_by_day(&self, user_id: Uuid, days: i32) -> Result<Vec<ApiUsageByDay>, DatabaseError>;
 }
 
 #[async_trait]
-pub trait EventRepository {
-    async fn create_event(&self, event: EventNew) -> Result<Event, DatabaseError>;
+pub trait AdminRepository {
+    /// Platform-wide totals over the last `days` days.
+    async fn totals(&self, days: i32) -> Result<AdminTotals, DatabaseError>;
 
-    async fn update_event(
+    /// Traffic per catalog API over the last `days` days.
+    async fn api_breakdown(&self, days: i32) -> Result<Vec<AdminApiUsage>, DatabaseError>;
+
+    /// Requests per UTC day over the last `days` days, zero-filled.
+    async fn daily_requests(&self, days: i32) -> Result<Vec<ApiUsageByDay>, DatabaseError>;
+
+    /// Every user with their usage over the last `days` days, busiest first.
+    /// `search` matches username or email, case-insensitively.
+    async fn list_users_usage(
         &self,
-        event: EventUpdate,
-        event_id: Uuid,
-    ) -> Result<Event, DatabaseError>;
+        search: Option<&str>,
+        days: i32,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<AdminUserUsage>, DatabaseError>;
 
-    async fn delete_event(&self, id: Uuid);
-
-    async fn find_event_by_id(&self, id: Uuid) -> Result<Event, DatabaseError>;
-
-    async fn find_list_events_by_current_id(&self, id: Uuid) -> Result<Vec<Event>, DatabaseError>;
-
-    async fn find_list_events(
+    /// Change a user's role and write the audit row in one transaction.
+    /// Refuses to demote the last remaining admin.
+    async fn set_role(
         &self,
-        pagination: PaginationRequest,
-        filter: EventFilter,
-    ) -> Result<PaginateVec<Event>, DatabaseError>;
-}
+        actor_id: Uuid,
+        target_id: Uuid,
+        role: &str,
+    ) -> Result<User, DatabaseError>;
 
-#[async_trait]
-pub trait EventRegistrationRepository {
-    async fn join_event(
+    async fn list_audit_log(&self, limit: i64) -> Result<Vec<AuditLogEntry>, DatabaseError>;
+
+    /// Create the built-in admin. Does nothing (returns `None`) when an admin
+    /// already exists; errors when the username or email is already taken by
+    /// a regular account (it is never promoted, its password is unknown).
+    async fn bootstrap_admin(
         &self,
-        event_id: Uuid,
-        user_id: Uuid,
-    ) -> Result<(EventRegistration, Event, Option<Wallet>), DatabaseError>;
-
-    async fn leave_event(
-        &self,
-        event_id: Uuid,
-        user_id: Uuid,
-    ) -> Result<(EventRegistration, Event, Option<Wallet>), DatabaseError>;
-
-    async fn find_registration(
-        &self,
-        event_id: Uuid,
-        user_id: Uuid,
-    ) -> Result<Option<EventRegistration>, DatabaseError>;
-}
-
-pub trait Filterable {
-    fn apply_filter(&self, qb: &mut QueryBuilder<'_, sqlx::Postgres>);
-}
-
-fn build_paginated_query<'a, F: Filterable>(
-    table: &'a str,
-    filter: &'a F,
-    pagination: &'a PaginationRequest,
-    order_by: &'a str,
-) -> QueryBuilder<'a, sqlx::Postgres> {
-    let mut qb = QueryBuilder::new(format!("SELECT * FROM {table} WHERE 1=1"));
-    filter.apply_filter(&mut qb);
-    qb.push(format!(" ORDER BY {order_by}"));
-    qb.push(" LIMIT ")
-        .push_bind(pagination.per_page.unwrap_or(3));
-    qb.push(" OFFSET ")
-        .push_bind(pagination.page * pagination.per_page.unwrap_or(0));
-    qb
+        username: &str,
+        email: &str,
+        hash_pwd: &str,
+    ) -> Result<Option<User>, DatabaseError>;
 }

@@ -8,6 +8,8 @@ use crate::{
     repos::{DynUserRepository, UserRepository},
 };
 
+pub const MIN_PASSWORD_LEN: usize = 8;
+
 #[derive(Clone)]
 pub struct UserServices {
     user_repo: DynUserRepository,
@@ -45,18 +47,23 @@ impl UserServices {
         Ok((user, token))
     }
 
-    /// Verify an email/password credential and return the matching user.
+    /// Verify a credential and return the matching user. `identifier` is an
+    /// email address or a username.
     ///
-    /// Returns `DatabaseError::InvalidCredentials` both when the email is
+    /// Returns `DatabaseError::InvalidCredentials` both when the account is
     /// unknown and when the password doesn't match, so callers never leak
     /// whether an email is registered. The same error is returned for an
     /// OAuth-only account (no password set).
-    pub async fn login(&self, email: &str, password: &str) -> Result<User, DatabaseError> {
-        let user = self
-            .user_repo
-            .find_by_email(email)
-            .await?
-            .ok_or(DatabaseError::InvalidCredentials)?;
+    pub async fn login(&self, identifier: &str, password: &str) -> Result<User, DatabaseError> {
+        let identifier = identifier.trim();
+        let user = match self.user_repo.find_by_email(identifier).await? {
+            Some(user) => user,
+            None => self
+                .user_repo
+                .find_by_username(identifier)
+                .await?
+                .ok_or(DatabaseError::InvalidCredentials)?,
+        };
 
         let stored_hash = user
             .password_hash()
@@ -107,5 +114,37 @@ impl UserServices {
         }
         let token = self.issue_verification_token(user_id).await?;
         Ok((user, token))
+    }
+
+    /// Replace a user's password after checking the current one. Also clears
+    /// the forced-change flag set on a bootstrapped admin.
+    pub async fn change_password(
+        &self,
+        user_id: Uuid,
+        current: &str,
+        new: &str,
+    ) -> Result<User, DatabaseError> {
+        let user = self.get_user(user_id).await?;
+        let stored_hash = user.password_hash().ok_or_else(|| {
+            DatabaseError::ValidationError("This account has no password to change".into())
+        })?;
+        if !verify_password(current, stored_hash) {
+            return Err(DatabaseError::ValidationError(
+                "Current password is incorrect".into(),
+            ));
+        }
+        if new.len() < MIN_PASSWORD_LEN {
+            return Err(DatabaseError::ValidationError(format!(
+                "New password must be at least {MIN_PASSWORD_LEN} characters"
+            )));
+        }
+        if new == current {
+            return Err(DatabaseError::ValidationError(
+                "New password must differ from the current one".into(),
+            ));
+        }
+        self.user_repo
+            .update_password(user_id, &hash_password(new)?)
+            .await
     }
 }

@@ -60,8 +60,12 @@ export function LoginPage({ error, onLogin, onLoginWithPassword, onRegister }: L
             </label>
           )}
           <label>
-            Email
-            <input type="email" name="email" autoComplete="email" required />
+            {mode === 'login' ? 'Email or username' : 'Email'}
+            {mode === 'login' ? (
+              <input type="text" name="email" autoComplete="username" required />
+            ) : (
+              <input type="email" name="email" autoComplete="email" required />
+            )}
           </label>
           <label>
             Password

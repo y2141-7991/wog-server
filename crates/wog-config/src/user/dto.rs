@@ -13,8 +13,15 @@ pub struct RegisterRequest {
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct LoginRequest {
+    /// Email address or username.
     pub email: String,
     pub password: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -22,7 +29,7 @@ pub struct VerifyEmailRequest {
     pub token: String,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct UserResponse {
     pub id: Uuid,
     pub email: String,
@@ -30,6 +37,8 @@ pub struct UserResponse {
     pub avatar_url: Option<String>,
     pub is_online: bool,
     pub email_verified: bool,
+    pub role: String,
+    pub must_change_password: bool,
 }
 
 pub struct UserProfileResponse {
@@ -49,6 +58,8 @@ impl From<User> for UserResponse {
             avatar_url: value.avatar_url,
             is_online: value.is_online,
             email_verified: value.email_verified,
+            role: value.role,
+            must_change_password: value.must_change_password,
         }
     }
 }
@@ -64,6 +75,8 @@ impl From<UserProfile> for UserResponse {
             // UserProfile doesn't carry verification state; assume unverified
             // rather than asserting something we don't actually know.
             email_verified: false,
+            role: "user".into(),
+            must_change_password: false,
         }
     }
 }
