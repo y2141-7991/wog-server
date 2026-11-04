@@ -28,6 +28,12 @@ pub enum DatabaseError {
     RateLimited(String),
     #[error("{0}")]
     UpstreamFailure(String),
+    #[error("{0}")]
+    Forbidden(String),
+    #[error("{0}")]
+    Unauthorized(String),
+    #[error("Billing is not configured on this server")]
+    BillingDisabled,
     #[error("An unknown error occurred: {0}")]
     Others(String),
 }

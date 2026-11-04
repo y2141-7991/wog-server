@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { fetchAuditLog, fetchOverview, fetchUsers } from '../api/admin'
+import { AdminPayments } from '../components/AdminPayments'
 import { AdminUserDetail } from '../components/AdminUserDetail'
 import { DailyBars } from '../components/DailyBars'
 import { compact, timeAgo } from '../lib/format'
 import type { AdminOverview, AdminUsers, AuditLogEntry } from '../types'
 
-type Tab = 'usage' | 'audit'
+type Tab = 'usage' | 'payments' | 'audit'
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -16,14 +17,20 @@ function Stat({ label, value }: { label: string; value: string }) {
   )
 }
 
-export function AdminPage({ currentUserId }: { currentUserId: string }) {
+export function AdminPage({ currentUserId, initialUserId }: { currentUserId: string; initialUserId?: string }) {
   const [tab, setTab] = useState<Tab>('usage')
   const [days, setDays] = useState(30)
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(0)
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selected, setSelected] = useState<string | null>(initialUserId ?? null)
   const [reload, setReload] = useState(0)
+
+  // Bring the user's detail into view when a user is picked (also when arriving via ?user=).
+  useEffect(() => {
+    if (!selected) return
+    document.getElementById('admin-user-detail')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [selected])
 
   const [overview, setOverview] = useState<AdminOverview | null>(null)
   const [users, setUsers] = useState<AdminUsers | null>(null)
@@ -71,6 +78,7 @@ export function AdminPage({ currentUserId }: { currentUserId: string }) {
         <h1>Admin</h1>
         <div className="chips">
           <button className={`chip${tab === 'usage' ? ' chip-active' : ''}`} onClick={() => setTab('usage')}>Usage</button>
+          <button className={`chip${tab === 'payments' ? ' chip-active' : ''}`} onClick={() => setTab('payments')}>Payments</button>
           <button className={`chip${tab === 'audit' ? ' chip-active' : ''}`} onClick={() => setTab('audit')}>Audit log</button>
         </div>
         {tab === 'usage' && (
@@ -85,6 +93,19 @@ export function AdminPage({ currentUserId }: { currentUserId: string }) {
 
       {tab === 'usage' && (
         <>
+          {selected && (
+            <div id="admin-user-detail" style={{ scrollMarginTop: 80 }}>
+              <AdminUserDetail
+                key={selected}
+                userId={selected}
+                days={days}
+                isSelf={selected === currentUserId}
+                onClose={() => setSelected(null)}
+                onRoleChanged={() => setReload((n) => n + 1)}
+              />
+            </div>
+          )}
+
           <div className="stats">
             <Stat label="Users" value={totals ? totals.total_users.toLocaleString() : '–'} />
             <Stat label="Active users" value={totals ? totals.active_users.toLocaleString() : '–'} />
@@ -111,17 +132,6 @@ export function AdminPage({ currentUserId }: { currentUserId: string }) {
               </tbody>
             </table>
           </section>
-
-          {selected && (
-            <AdminUserDetail
-              key={selected}
-              userId={selected}
-              days={days}
-              isSelf={selected === currentUserId}
-              onClose={() => setSelected(null)}
-              onRoleChanged={() => setReload((n) => n + 1)}
-            />
-          )}
 
           <section className="panel">
             <div className="panel-head">
@@ -168,6 +178,8 @@ export function AdminPage({ currentUserId }: { currentUserId: string }) {
           </section>
         </>
       )}
+
+      {tab === 'payments' && <AdminPayments />}
 
       {tab === 'audit' && (
         <section className="panel">

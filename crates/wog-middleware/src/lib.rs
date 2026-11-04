@@ -11,9 +11,10 @@ use serde_json::json;
 use wog_infras::{
     AppConfig, Claims, TokenType,
     email::EmailService,
+    models::User,
     services::{
-        admin::AdminServices, marketplace::MarketplaceServices, oauth::OAuthServices,
-        users::UserServices,
+        admin::AdminServices, billing::BillingServices, marketplace::MarketplaceServices,
+        oauth::OAuthServices, support::SupportServices, users::UserServices,
     },
 };
 
@@ -25,6 +26,8 @@ pub struct AppState {
     pub email_service: EmailService,
     pub marketplace_services: MarketplaceServices,
     pub admin_services: AdminServices,
+    pub billing_services: BillingServices,
+    pub support_services: SupportServices,
 }
 
 pub struct AuthClaims(pub Claims);
@@ -33,6 +36,16 @@ pub struct AuthClaims(pub Claims);
 /// database on every request, so a demotion takes effect immediately, and it
 /// refuses an admin who still has to change the bootstrap password.
 pub struct AdminClaims(pub Claims);
+
+/// A signed-in user who may use the app: a valid access token, an account that
+/// still exists, a verified email, and no pending forced password change.
+/// The user is read from the database, so `user.role` is never taken from the
+/// token. Also carries the token's expiry so long-lived connections can end
+/// with the session.
+pub struct VerifiedUser {
+    pub user: User,
+    pub token_exp: usize,
+}
 
 #[derive(Debug)]
 pub enum AdminError {
@@ -75,6 +88,34 @@ impl FromRequestParts<AppState> for AdminClaims {
             return Err(AdminError::Forbidden("Change your password first"));
         }
         Ok(AdminClaims(claims))
+    }
+}
+
+impl FromRequestParts<AppState> for VerifiedUser {
+    type Rejection = AdminError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let AuthClaims(claims) = AuthClaims::from_request_parts(parts, state)
+            .await
+            .map_err(AdminError::Auth)?;
+        let user = state
+            .user_services
+            .get_user(claims.sub)
+            .await
+            .map_err(|_| AdminError::Auth(AuthError("Account not found".into())))?;
+        if !user.email_verified {
+            return Err(AdminError::Forbidden("Verify your email first"));
+        }
+        if user.must_change_password {
+            return Err(AdminError::Forbidden("Change your password first"));
+        }
+        Ok(VerifiedUser {
+            user,
+            token_exp: claims.exp,
+        })
     }
 }
 

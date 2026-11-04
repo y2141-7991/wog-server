@@ -1,3 +1,4 @@
+import { SubscriptionSection } from '../components/SubscriptionSection'
 import type { User } from '../types'
 
 interface ProfilePageProps {
@@ -8,8 +9,8 @@ interface ProfilePageProps {
 
 export function ProfilePage({ user, onLogout, onChangePassword }: ProfilePageProps) {
   return (
-    <div className="container">
-      <div className="profile">
+    <div className="detail">
+      <div className="profile profile-head">
         <h2>{user.username}</h2>
         {user.avatar_url && <img src={user.avatar_url} alt={user.username} />}
         <p className="text-muted">{user.email}</p>
@@ -18,6 +19,7 @@ export function ProfilePage({ user, onLogout, onChangePassword }: ProfilePagePro
           <button className="btn-secondary" onClick={onLogout}>Sign out</button>
         </div>
       </div>
+      <SubscriptionSection />
     </div>
   )
 }

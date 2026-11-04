@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { readCatalog, writeCatalog } from '../api/catalogCache'
 import { fetchApis } from '../api/marketplace'
 import { ApiCard } from '../components/ApiCard'
 import type { MarketplaceApi } from '../types'
@@ -12,16 +13,23 @@ interface HubPageProps {
 }
 
 export function HubPage({ query, onQuery, onOpen }: HubPageProps) {
-  const [apis, setApis] = useState<MarketplaceApi[] | null>(null)
+  const [apis, setApis] = useState<MarketplaceApi[] | null>(readCatalog)
   const [error, setError] = useState<string | null>(null)
+  // With a cached copy on screen, a failed background refresh is not worth an error.
+  const hadCache = useRef(apis !== null)
   const [category, setCategory] = useState('All')
   const [sort, setSort] = useState<Sort>('relevance')
 
   useEffect(() => {
     let cancelled = false
     fetchApis()
-      .then((a) => !cancelled && setApis(a))
-      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Could not load the catalog'))
+      .then((a) => {
+        writeCatalog(a)
+        if (!cancelled) setApis(a)
+      })
+      .catch((e) => {
+        if (!cancelled && !hadCache.current) setError(e instanceof Error ? e.message : 'Could not load the catalog')
+      })
     return () => {
       cancelled = true
     }

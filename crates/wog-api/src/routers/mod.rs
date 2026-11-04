@@ -6,13 +6,15 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use wog_middleware::AppState;
 
 use crate::routers::oauth::{
-    auth_me, change_password, google_callback, google_login, login, logout, refresh_token, register,
-    resend_verification, verify_email,
+    auth_me, change_password, google_callback, google_login, login, logout, refresh_token,
+    register, resend_verification, verify_email,
 };
 
 pub mod admin;
+pub mod billing;
 pub mod marketplace;
 pub mod oauth;
+pub mod support;
 pub mod user;
 
 pub fn user_routes() -> OpenApiRouter<AppState> {
@@ -26,7 +28,10 @@ pub fn oauth_routes() -> Router<AppState> {
         .route("/api/v1/auth/register", post(register))
         .route("/api/v1/auth/login", post(login))
         .route("/api/v1/auth/verify-email", post(verify_email))
-        .route("/api/v1/auth/resend-verification", post(resend_verification))
+        .route(
+            "/api/v1/auth/resend-verification",
+            post(resend_verification),
+        )
         .route("/api/v1/auth/me", get(auth_me))
         .route("/api/v1/auth/refresh", post(refresh_token))
         .route("/api/v1/auth/change-password", post(change_password))
@@ -44,7 +49,38 @@ pub fn marketplace_routes() -> OpenApiRouter<AppState> {
 
 /// The metered gateway, authenticated by `X-API-Key` instead of a session.
 pub fn gateway_routes() -> Router<AppState> {
-    Router::new().route("/gateway/v1/{provider}/{endpoint}", get(marketplace::gateway))
+    Router::new().route(
+        "/gateway/v1/{provider}/{endpoint}",
+        get(marketplace::gateway),
+    )
+}
+
+pub fn billing_routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(billing::list_plans))
+        .routes(routes!(billing::get_subscription))
+        .routes(routes!(billing::create_order, billing::list_orders))
+        .routes(routes!(billing::get_order))
+        .routes(routes!(billing::get_order_status))
+        .routes(routes!(billing::cancel_order))
+        .routes(routes!(billing::check_order))
+        .routes(routes!(billing::sepay_webhook))
+}
+
+/// The chat socket. A plain route: it is a protocol upgrade, not a JSON API,
+/// so it is not part of the OpenAPI document.
+pub fn support_ws_routes() -> Router<AppState> {
+    Router::new().route("/api/v1/support/ws", get(support::support_ws))
+}
+
+pub fn support_routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(support::get_my_conversation))
+        .routes(routes!(support::list_conversations))
+        .routes(routes!(support::get_conversation))
+        .routes(routes!(support::list_messages))
+        .routes(routes!(support::close_conversation))
+        .routes(routes!(support::reopen_conversation))
 }
 
 pub fn admin_routes() -> OpenApiRouter<AppState> {
@@ -54,4 +90,6 @@ pub fn admin_routes() -> OpenApiRouter<AppState> {
         .routes(routes!(admin::get_user_usage))
         .routes(routes!(admin::set_role))
         .routes(routes!(admin::get_audit_log))
+        .routes(routes!(admin::list_payment_orders))
+        .routes(routes!(admin::list_payment_events))
 }

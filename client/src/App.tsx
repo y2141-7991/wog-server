@@ -11,12 +11,16 @@ import { DashboardPage } from './pages/DashboardPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { VerifyEmailPage } from './pages/VerifyEmailPage'
 import { PendingVerificationPage } from './pages/PendingVerificationPage'
+import { AdminSupportPage } from './pages/AdminSupportPage'
+import { SupportChatWidget } from './components/SupportChatWidget'
+import { useAdminSupport } from './hooks/useAdminSupport'
 
 type Page =
   | { name: 'home' }
   | { name: 'api'; slug: string }
   | { name: 'dashboard' }
-  | { name: 'admin' }
+  | { name: 'admin'; userId?: string }
+  | { name: 'admin-support' }
   | { name: 'profile' }
   | { name: 'change-password' }
   | { name: 'verify-email' }
@@ -26,7 +30,8 @@ function pathToPage(): Page {
   if (path === '/me') return { name: 'profile' }
   if (path === '/change-password') return { name: 'change-password' }
   if (path === '/dashboard') return { name: 'dashboard' }
-  if (path === '/admin') return { name: 'admin' }
+  if (path === '/admin/support') return { name: 'admin-support' }
+  if (path === '/admin') return { name: 'admin', userId: new URLSearchParams(window.location.search).get('user') ?? undefined }
   if (path === '/verify-email') return { name: 'verify-email' }
   if (path.startsWith('/apis/')) return { name: 'api', slug: decodeURIComponent(path.slice('/apis/'.length)) }
   return { name: 'home' }
@@ -37,7 +42,8 @@ function pageToPath(p: Page): string {
     case 'profile': return '/me'
     case 'change-password': return '/change-password'
     case 'dashboard': return '/dashboard'
-    case 'admin': return '/admin'
+    case 'admin': return p.userId ? `/admin?user=${encodeURIComponent(p.userId)}` : '/admin'
+    case 'admin-support': return '/admin/support'
     case 'api': return `/apis/${encodeURIComponent(p.slug)}`
     default: return '/'
   }
@@ -54,17 +60,17 @@ function App() {
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
+  // Admins keep one chat socket for the whole session (the nav badge is live everywhere).
+  const adminChat = useAdminSupport(
+    !!user && user.role === 'admin' && user.email_verified && !user.must_change_password,
+  )
+
   const navigate = useCallback((p: Page) => {
     window.history.pushState(null, '', pageToPath(p))
     setPage(p)
   }, [])
 
   const goHome = () => navigate({ name: 'home' })
-
-  function search(q: string) {
-    setQuery(q)
-    if (page.name !== 'home') goHome()
-  }
 
   if (page.name === 'verify-email') {
     return <VerifyEmailPage onVerify={verifyEmail} onContinue={goHome} />
@@ -97,13 +103,13 @@ function App() {
     <>
       <Navbar
         user={user}
-        query={query}
-        onQuery={search}
         onHome={goHome}
         onDashboard={() => navigate({ name: 'dashboard' })}
         onAdmin={user.role === 'admin' ? () => navigate({ name: 'admin' }) : undefined}
+        onSupport={user.role === 'admin' ? () => navigate({ name: 'admin-support' }) : undefined}
+        supportUnread={adminChat.totalUnread}
         onProfile={() => navigate({ name: 'profile' })}
-        showSearch={page.name === 'home' || page.name === 'api'}
+        planRefreshKey={page.name}
       />
       <main>
         {page.name === 'home' && (
@@ -112,8 +118,15 @@ function App() {
         {page.name === 'api' && (
           <ApiDetailPage slug={page.slug} onBack={goHome} onDashboard={() => navigate({ name: 'dashboard' })} />
         )}
-        {page.name === 'dashboard' && <DashboardPage />}
-        {page.name === 'admin' && user.role === 'admin' && <AdminPage currentUserId={user.id} />}
+        {page.name === 'dashboard' && <DashboardPage onUpgrade={() => navigate({ name: 'profile' })} />}
+        {page.name === 'admin' && user.role === 'admin' && <AdminPage currentUserId={user.id} initialUserId={page.userId} />}
+        {page.name === 'admin-support' && user.role === 'admin' && (
+          <AdminSupportPage
+            support={adminChat}
+            currentUserId={user.id}
+            onOpenUser={(userId) => navigate({ name: 'admin', userId })}
+          />
+        )}
         {page.name === 'profile' && (
           <ProfilePage user={user} onLogout={logout} onChangePassword={() => navigate({ name: 'change-password' })} />
         )}
@@ -121,6 +134,7 @@ function App() {
           <ChangePasswordPage onChange={changePassword} onBack={() => navigate({ name: 'profile' })} />
         )}
       </main>
+      {user.role !== 'admin' && <SupportChatWidget user={user} onAuthLost={() => window.location.reload()} />}
     </>
   )
 }

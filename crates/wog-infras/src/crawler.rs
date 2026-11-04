@@ -36,11 +36,7 @@ impl Crawler {
         })
     }
 
-    pub async fn call(
-        &self,
-        method: &str,
-        params: Vec<(String, String)>,
-    ) -> Result<Value, Status> {
+    pub async fn call(&self, method: &str, params: Vec<(String, String)>) -> Result<Value, Status> {
         let mut request = Request::new(CallRequest {
             method: method.to_string(),
             params: params.into_iter().collect(),
@@ -54,7 +50,12 @@ impl Crawler {
 }
 
 fn struct_to_json(s: prost_types::Struct) -> Value {
-    Value::Object(s.fields.into_iter().map(|(k, v)| (k, value_to_json(v))).collect())
+    Value::Object(
+        s.fields
+            .into_iter()
+            .map(|(k, v)| (k, value_to_json(v)))
+            .collect(),
+    )
 }
 
 fn value_to_json(v: prost_types::Value) -> Value {
@@ -63,7 +64,9 @@ fn value_to_json(v: prost_types::Value) -> Value {
         None | Some(Kind::NullValue(_)) => Value::Null,
         // protobuf Struct numbers are doubles; hand whole numbers back as integers.
         Some(Kind::NumberValue(n)) if n.fract() == 0.0 && n.abs() < 9e15 => Value::from(n as i64),
-        Some(Kind::NumberValue(n)) => serde_json::Number::from_f64(n).map_or(Value::Null, Value::Number),
+        Some(Kind::NumberValue(n)) => {
+            serde_json::Number::from_f64(n).map_or(Value::Null, Value::Number)
+        }
         Some(Kind::StringValue(s)) => Value::String(s),
         Some(Kind::BoolValue(b)) => Value::Bool(b),
         Some(Kind::StructValue(s)) => struct_to_json(s),

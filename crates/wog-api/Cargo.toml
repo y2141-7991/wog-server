@@ -8,6 +8,7 @@ wog-middleware = { path = "../wog-middleware" }
 wog-infras = { path = "../wog-infras" }
 wog-config = { path = "../wog-config" }
 wog-oauth = { path = "../wog-oauth" }
+payment-client = { path = "../payment-client" }
 
 axum = { version = "0.8.8", features = ["ws", "default", "macros"] }
 axum-extra = { version = "0.10.1", features = ["cookie"] }
@@ -30,4 +31,10 @@ utoipa-axum = "0.2.0"
 bytes = "1.11.1"
 utoipa-scalar = { version = "0.3.0", features = ["axum"] }
 dotenvy = "=0.15"
+tokio-tungstenite = "0.28"
+futures-util = "0.3"
+
+[dev-dependencies]
+async-trait = "0.1.89"
+chrono = "0.4"
 

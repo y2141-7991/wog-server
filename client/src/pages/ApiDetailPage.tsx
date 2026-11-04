@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { readCatalog } from '../api/catalogCache'
 import { fetchApi } from '../api/marketplace'
 import { ApiAvatar } from '../components/ApiCard'
 import { TryIt } from '../components/TryIt'
@@ -39,7 +40,7 @@ function pythonFor(api: MarketplaceApi) {
 type Lang = 'curl' | 'python'
 
 export function ApiDetailPage({ slug, onBack, onDashboard }: { slug: string; onBack: () => void; onDashboard: () => void }) {
-  const [api, setApi] = useState<MarketplaceApi | null>(null)
+  const [api, setApi] = useState<MarketplaceApi | null>(() => readCatalog()?.find((a) => a.slug === slug) ?? null)
   const [error, setError] = useState<string | null>(null)
   const [lang, setLang] = useState<Lang>('curl')
 
@@ -114,6 +115,7 @@ export function ApiDetailPage({ slug, onBack, onDashboard }: { slug: string; onB
             <p>
               {api.monthly_quota.toLocaleString()} requests per month · {api.rate_limit_per_minute} requests per minute.
               Create a key on the <button className="link-btn" onClick={onDashboard}>dashboard</button>.
+              Paid plans (Basic, Pro, Ultra) replace these limits with a larger quota shared by all APIs.
             </p>
           </section>
         </div>

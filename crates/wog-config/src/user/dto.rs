@@ -3,7 +3,6 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 use wog_infras::models::{User, UserProfile};
 
-
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RegisterRequest {
     pub username: String,

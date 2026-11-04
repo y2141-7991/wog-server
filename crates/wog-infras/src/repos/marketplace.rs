@@ -1,11 +1,12 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::{
     errors::DatabaseError,
-    models::{Api, ApiKey, ApiUsageByApi, ApiUsageByDay},
-    repos::MarketplaceRepository,
+    models::{ActiveSubscription, Api, ApiKey, ApiUsageByApi, ApiUsageByDay},
+    repos::{MarketplaceRepository, billing},
 };
 
 /// Catalog row plus live metrics from the last 30 days of metered calls.
@@ -109,7 +110,10 @@ impl MarketplaceRepository for PgMarketplaceRepo {
         Ok(())
     }
 
-    async fn find_active_key_by_hash(&self, key_hash: &str) -> Result<Option<ApiKey>, DatabaseError> {
+    async fn find_active_key_by_hash(
+        &self,
+        key_hash: &str,
+    ) -> Result<Option<ApiKey>, DatabaseError> {
         Ok(sqlx::query_as::<_, ApiKey>(
             "SELECT * FROM api_keys WHERE key_hash = $1 AND revoked_at IS NULL",
         )
@@ -147,7 +151,11 @@ impl MarketplaceRepository for PgMarketplaceRepo {
         Ok(())
     }
 
-    async fn count_usage_this_month(&self, user_id: Uuid, api_id: Uuid) -> Result<i64, DatabaseError> {
+    async fn count_usage_this_month(
+        &self,
+        user_id: Uuid,
+        api_id: Uuid,
+    ) -> Result<i64, DatabaseError> {
         let (count,): (i64,) = sqlx::query_as(
             r#"
                 SELECT COUNT(*) FROM api_usage
@@ -162,7 +170,26 @@ impl MarketplaceRepository for PgMarketplaceRepo {
         Ok(count)
     }
 
-    async fn usage_by_api(&self, user_id: Uuid, days: i32) -> Result<Vec<ApiUsageByApi>, DatabaseError> {
+    async fn find_active_subscription(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Option<ActiveSubscription>, DatabaseError> {
+        billing::find_active_subscription(&self.pg_pool, user_id).await
+    }
+
+    async fn count_usage_since(
+        &self,
+        user_id: Uuid,
+        since: DateTime<Utc>,
+    ) -> Result<i64, DatabaseError> {
+        billing::count_usage_since(&self.pg_pool, user_id, since).await
+    }
+
+    async fn usage_by_api(
+        &self,
+        user_id: Uuid,
+        days: i32,
+    ) -> Result<Vec<ApiUsageByApi>, DatabaseError> {
         Ok(sqlx::query_as::<_, ApiUsageByApi>(
             r#"
                 SELECT a.slug, a.name, a.monthly_quota,
@@ -184,7 +211,11 @@ impl MarketplaceRepository for PgMarketplaceRepo {
         .await?)
     }
 
-    async fn usage_by_day(&self, user_id: Uuid, days: i32) -> Result<Vec<ApiUsageByDay>, DatabaseError> {
+    async fn usage_by_day(
+        &self,
+        user_id: Uuid,
+        days: i32,
+    ) -> Result<Vec<ApiUsageByDay>, DatabaseError> {
         Ok(sqlx::query_as::<_, ApiUsageByDay>(
             r#"
                 SELECT d::date AS day, COUNT(u.id) AS requests

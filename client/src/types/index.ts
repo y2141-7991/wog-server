@@ -131,3 +131,111 @@ export interface AuditLogEntry {
   new_value: string | null
   created_at: string
 }
+
+// ───────── Billing ─────────
+
+export type PlanSlug = 'basic' | 'pro' | 'ultra'
+
+export interface Plan {
+  slug: PlanSlug
+  name: string
+  /** Integer VND. */
+  price_vnd: number
+  period_days: number
+  monthly_quota: number
+  rate_limit_per_minute: number
+  features: string[]
+  sort_order: number
+}
+
+export interface SubscriptionPlan {
+  slug: PlanSlug
+  name: string
+  monthly_quota: number
+  rate_limit_per_minute: number
+  current_period_start: string
+  current_period_end: string
+}
+
+export interface Subscription {
+  status: 'active' | 'free'
+  plan: SubscriptionPlan | null
+  usage: {
+    used: number
+    /** Absent on the free tier, where every API has its own quota. */
+    quota: number | null
+    period_start: string
+  }
+}
+
+export type OrderStatus = 'pending' | 'paid' | 'expired' | 'canceled' | 'failed'
+
+export interface Order {
+  id: string
+  plan: PlanSlug
+  plan_name: string
+  amount_vnd: number
+  status: OrderStatus
+  payment_code: string
+  paid_at: string | null
+  expires_at: string
+  created_at: string
+}
+
+/** An order plus everything needed to pay it. */
+export interface OrderPayment {
+  id: string
+  plan: PlanSlug
+  plan_name: string
+  amount_vnd: number
+  status: OrderStatus
+  expires_at: string
+  created_at: string
+  transfer_content: string
+  bank_name: string
+  account_number: string
+  account_holder: string
+  qr_url: string
+}
+
+export interface OrderStatusResponse {
+  id: string
+  status: OrderStatus
+  paid_at: string | null
+}
+
+export interface AdminOrder extends Order {
+  username: string | null
+  sepay_transaction_id: number | null
+  paid_amount_vnd: number | null
+}
+
+export interface AdminOrders {
+  orders: AdminOrder[]
+  total: number
+  page: number
+  per_page: number
+}
+
+export interface PaymentEvent {
+  id: string
+  source: 'webhook' | 'reconcile'
+  sepay_transaction_id: number | null
+  transfer_type: string | null
+  amount_vnd: number | null
+  payment_code: string | null
+  content: string | null
+  matched_order_id: string | null
+  outcome: string
+  note: string | null
+  needs_review: boolean
+  created_at: string
+}
+
+export interface AdminPaymentEvents {
+  events: PaymentEvent[]
+  total: number
+  page: number
+  per_page: number
+}
+export * from './support'

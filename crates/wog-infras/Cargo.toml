@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 wog-oauth = { path = "../wog-oauth"}
+payment-client = { path = "../payment-client" }
 
 anyhow = "1.0.102"
 async-trait = "0.1.89"
@@ -16,7 +17,8 @@ thiserror = "2.0.18"
 uuid = { version = "1.21.0", features = ["v4", "serde"] }
 envconfig = "0.11.1"
 tracing = "0.1.44"
-tokio = "1.50.0"
+tokio = { version = "1.50.0", features = ["sync", "time"] }
+dashmap = "6"
 jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
 argon2 = "0.5"
 lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "pool", "hostname", "builder"] }
@@ -29,3 +31,6 @@ sha2 = "0.10"
 [build-dependencies]
 protoc-bin-vendored = "3"
 tonic-prost-build = "0.14"
+
+[dev-dependencies]
+tokio = { version = "1.50.0", features = ["macros", "rt-multi-thread", "time"] }

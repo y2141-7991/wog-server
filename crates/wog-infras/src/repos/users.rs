@@ -137,7 +137,11 @@ impl UserRepository for PgUserRepo {
         .await?)
     }
 
-    async fn update_password(&self, user_id: uuid::Uuid, hash_pwd: &str) -> Result<User, DatabaseError> {
+    async fn update_password(
+        &self,
+        user_id: uuid::Uuid,
+        hash_pwd: &str,
+    ) -> Result<User, DatabaseError> {
         Ok(sqlx::query_as::<_, User>(
             r#"
                 UPDATE users

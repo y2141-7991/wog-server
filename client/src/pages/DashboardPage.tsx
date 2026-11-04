@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createKey, fetchKeys, fetchUsage, revokeKey, saveKey } from '../api/marketplace'
+import { CopyButton } from '../components/CopyButton'
+import { NEAR_LIMIT, usePlanStatus } from '../hooks/usePlanStatus'
 import type { ApiKey, UsageResponse } from '../types'
 
-export function DashboardPage() {
+export function DashboardPage({ onUpgrade }: { onUpgrade: () => void }) {
+  const plan = usePlanStatus('dashboard')
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [usage, setUsage] = useState<UsageResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -42,14 +45,24 @@ export function DashboardPage() {
     <div className="detail">
       <h1>Dashboard</h1>
       {error && <p className="error">{error}</p>}
+      {plan.planName && plan.ratio >= NEAR_LIMIT && (
+        <p className="upgrade-hint">
+          {plan.ratio >= 1 ? 'You have used up your quota' : `You have used ${Math.round(plan.ratio * 100)}% of your quota`}
+          {plan.paid ? ` on the ${plan.planName} plan.` : ' on the free plan.'}{' '}
+          <button className="link-btn" onClick={onUpgrade}>{plan.paid ? 'See plans' : 'Upgrade your plan'}</button>
+        </p>
+      )}
 
       <section className="panel">
         <h3>API keys</h3>
         {newSecret && (
-          <p className="secret">
-            Copy your new key now — it will not be shown again.
-            <code>{newSecret}</code>
-          </p>
+          <div className="secret">
+            <span>Copy your new key now — it will not be shown again.</span>
+            <div className="secret-row">
+              <code>{newSecret}</code>
+              <CopyButton value={newSecret} label="Copy key" />
+            </div>
+          </div>
         )}
         <form
           className="inline-form"

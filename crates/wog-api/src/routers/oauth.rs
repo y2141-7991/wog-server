@@ -21,7 +21,11 @@ use crate::errors::RestApiError;
 /// Attach the standard set of auth cookies (access/refresh token, lang,
 /// timestamp) onto a response. Shared by every endpoint that issues or
 /// rotates a token pair, so the cookie shape stays identical everywhere.
-pub(crate) fn apply_auth_cookies(response: &mut Response, token_pair: &TokenPair, cfg: &DefaultConfig) {
+pub(crate) fn apply_auth_cookies(
+    response: &mut Response,
+    token_pair: &TokenPair,
+    cfg: &DefaultConfig,
+) {
     let access_cookie = format!(
         "token={}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age={}",
         token_pair.access_token,
@@ -107,11 +111,7 @@ pub async fn google_callback(
     })?;
 
     let mut response = Redirect::to(&client_url).into_response();
-    apply_auth_cookies(
-        &mut response,
-        &token_pair,
-        &state.app_config.default_config,
-    );
+    apply_auth_cookies(&mut response, &token_pair, &state.app_config.default_config);
 
     Ok(response)
 }
@@ -167,11 +167,7 @@ pub async fn register(
         })),
     )
         .into_response();
-    apply_auth_cookies(
-        &mut response,
-        &token_pair,
-        &state.app_config.default_config,
-    );
+    apply_auth_cookies(&mut response, &token_pair, &state.app_config.default_config);
 
     Ok(response)
 }
@@ -195,10 +191,7 @@ pub async fn resend_verification(
     State(state): State<AppState>,
     AuthClaims(claims): AuthClaims,
 ) -> Result<impl IntoResponse, RestApiError> {
-    let (user, verification_token) = state
-        .user_services
-        .resend_verification(claims.sub)
-        .await?;
+    let (user, verification_token) = state.user_services.resend_verification(claims.sub).await?;
 
     let verify_url = format!(
         "{}/verify-email?token={}",
@@ -242,11 +235,7 @@ pub async fn login(
         "refresh_token": token_pair.refresh_token,
     }))
     .into_response();
-    apply_auth_cookies(
-        &mut response,
-        &token_pair,
-        &state.app_config.default_config,
-    );
+    apply_auth_cookies(&mut response, &token_pair, &state.app_config.default_config);
 
     Ok(response)
 }
@@ -311,11 +300,7 @@ pub async fn refresh_token(
         "timestamp": token_pair.timestamp,
     }))
     .into_response();
-    apply_auth_cookies(
-        &mut response,
-        &token_pair,
-        &state.app_config.default_config,
-    );
+    apply_auth_cookies(&mut response, &token_pair, &state.app_config.default_config);
 
     Ok(response)
 }

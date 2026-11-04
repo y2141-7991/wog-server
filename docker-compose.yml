@@ -5,3 +5,18 @@ services:
       - "3000:3000"
     env_file:
       - .env
+    # Everything is read from .env. Paid plans (SePay) need these, see
+    # "Subscriptions and payments" in the README; without them the server
+    # still runs and billing is switched off:
+    #   SEPAY_WEBHOOK_API_KEY, SEPAY_BANK_NAME, SEPAY_ACCOUNT_NUMBER,
+    #   SEPAY_ACCOUNT_HOLDER   (required)
+    #   SEPAY_API_TOKEN, SEPAY_PAYMENT_CODE_PREFIX, ORDER_TTL_MINUTES   (optional)
+    # Pass individual values through instead of .env if you prefer:
+    # environment:
+    #   SEPAY_WEBHOOK_API_KEY: ${SEPAY_WEBHOOK_API_KEY:-}
+    #   SEPAY_BANK_NAME: ${SEPAY_BANK_NAME:-}
+    #   SEPAY_ACCOUNT_NUMBER: ${SEPAY_ACCOUNT_NUMBER:-}
+    #   SEPAY_ACCOUNT_HOLDER: ${SEPAY_ACCOUNT_HOLDER:-}
+    #   SEPAY_API_TOKEN: ${SEPAY_API_TOKEN:-}
+    #   SEPAY_PAYMENT_CODE_PREFIX: ${SEPAY_PAYMENT_CODE_PREFIX:-WOG}
+    #   ORDER_TTL_MINUTES: ${ORDER_TTL_MINUTES:-30}

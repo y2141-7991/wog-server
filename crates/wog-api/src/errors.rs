@@ -52,6 +52,9 @@ pub enum RestApiError {
     #[error("{0}")]
     BadGateway(String),
 
+    #[error("{0}")]
+    ServiceUnavailable(String),
+
     #[error("Database error: {0}")]
     Database(String),
 
@@ -69,6 +72,7 @@ impl IntoResponse for RestApiError {
             RestApiError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
             RestApiError::TooManyRequests(msg) => (StatusCode::TOO_MANY_REQUESTS, msg.clone()),
             RestApiError::BadGateway(msg) => (StatusCode::BAD_GATEWAY, msg.clone()),
+            RestApiError::ServiceUnavailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg.clone()),
             RestApiError::Database(e) => {
                 tracing::error!("Database error: {:?}", e);
                 (
@@ -113,6 +117,11 @@ impl From<DatabaseError> for RestApiError {
             }
             DatabaseError::RateLimited(msg) => RestApiError::TooManyRequests(msg),
             DatabaseError::UpstreamFailure(msg) => RestApiError::BadGateway(msg),
+            DatabaseError::Forbidden(msg) => RestApiError::Forbidden(msg),
+            DatabaseError::Unauthorized(msg) => RestApiError::Unauthorized(msg),
+            DatabaseError::BillingDisabled => {
+                RestApiError::ServiceUnavailable("Billing is not available right now".into())
+            }
             _ => RestApiError::Database(value.to_string()),
         }
     }

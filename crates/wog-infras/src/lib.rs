@@ -1,3 +1,4 @@
+pub mod billing;
 pub mod crawler;
 pub mod email;
 pub mod errors;
@@ -5,6 +6,7 @@ pub mod models;
 pub mod password;
 pub mod repos;
 pub mod services;
+pub mod support;
 
 use anyhow::{Ok, Result};
 use chrono::Utc;
@@ -81,6 +83,34 @@ pub struct DefaultConfig {
     /// can call the crawler. Calls fail until it matches the upstream's.
     #[envconfig(from = "UPSTREAM_SECRET", default = "")]
     pub upstream_secret: String,
+    /// SePay billing. Billing endpoints are disabled (503) until the webhook
+    /// key, bank name, account number and account holder are all set.
+    #[envconfig(from = "SEPAY_WEBHOOK_API_KEY", default = "")]
+    pub sepay_webhook_api_key: String,
+    /// Bearer token for SePay's transactions API (reconciliation). Optional.
+    #[envconfig(from = "SEPAY_API_TOKEN", default = "")]
+    pub sepay_api_token: String,
+    /// Bank name as the QR image endpoint expects it, e.g. `Vietcombank`.
+    #[envconfig(from = "SEPAY_BANK_NAME", default = "")]
+    pub sepay_bank_name: String,
+    #[envconfig(from = "SEPAY_ACCOUNT_NUMBER", default = "")]
+    pub sepay_account_number: String,
+    #[envconfig(from = "SEPAY_ACCOUNT_HOLDER", default = "")]
+    pub sepay_account_holder: String,
+    /// Prefix of the payment code; must match the SePay payment-code setting.
+    #[envconfig(from = "SEPAY_PAYMENT_CODE_PREFIX", default = "WOG")]
+    pub sepay_payment_code_prefix: String,
+    #[envconfig(from = "SEPAY_QR_BASE_URL", default = "https://vietqr.app/img")]
+    pub sepay_qr_base_url: String,
+    #[envconfig(from = "SEPAY_API_BASE", default = "https://my.sepay.vn/userapi")]
+    pub sepay_api_base: String,
+    #[envconfig(from = "ORDER_TTL_MINUTES", default = "30")]
+    pub order_ttl_minutes: i64,
+    /// Extra browser origins allowed to open the support-chat WebSocket, comma
+    /// separated (e.g. `http://localhost:5173`). `CLIENT_URL` and
+    /// `REST_API_URL` are always allowed.
+    #[envconfig(from = "ALLOWED_ORIGINS", default = "")]
+    pub allowed_origins: String,
 }
 
 #[derive(Clone)]

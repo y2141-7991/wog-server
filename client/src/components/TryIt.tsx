@@ -12,6 +12,8 @@ export function TryIt({ api }: { api: MarketplaceApi }) {
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<{ status: number; ms: number; text: string } | null>(null)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
+  // Some APIs (search) also hand back a `search_id` to send along with the cursor.
+  const [nextSearchId, setNextSearchId] = useState<string | null>(null)
   const paged = api.params.some((p) => p.name === 'cursor')
 
   async function call(params: Record<string, string>) {
@@ -20,11 +22,13 @@ export function TryIt({ api }: { api: MarketplaceApi }) {
     try {
       const r = await callGateway(api.gateway_path, apiKey.trim(), params)
       setResult({ status: r.status, ms: r.ms, text: JSON.stringify(r.body, null, 2) })
-      const next = (r.body as { next_cursor?: unknown } | null)?.next_cursor
-      setNextCursor(typeof next === 'string' ? next : null)
+      const body = r.body as { next_cursor?: unknown; search_id?: unknown } | null
+      setNextCursor(typeof body?.next_cursor === 'string' ? body.next_cursor : null)
+      setNextSearchId(typeof body?.search_id === 'string' ? body.search_id : null)
     } catch (err) {
       setResult({ status: 0, ms: 0, text: err instanceof Error ? err.message : 'Request failed' })
       setNextCursor(null)
+      setNextSearchId(null)
     } finally {
       setRunning(false)
     }
@@ -37,7 +41,10 @@ export function TryIt({ api }: { api: MarketplaceApi }) {
 
   function loadNextPage() {
     if (nextCursor === null) return
-    const next = { ...values, cursor: nextCursor }
+    const next: Record<string, string> = { ...values, cursor: nextCursor }
+    if (nextSearchId !== null && api.params.some((p) => p.name === 'search_id')) {
+      next.search_id = nextSearchId
+    }
     setValues(next)
     void call(next)
   }

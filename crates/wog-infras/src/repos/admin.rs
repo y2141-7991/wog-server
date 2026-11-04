@@ -120,7 +120,10 @@ impl AdminRepository for PgAdminRepo {
             "#,
         )
         .bind(search.map(|q| {
-            let escaped = q.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+            let escaped = q
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_");
             format!("%{escaped}%")
         }))
         .bind(days)

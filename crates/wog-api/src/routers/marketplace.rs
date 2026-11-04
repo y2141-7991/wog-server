@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use axum::{
     Json,
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, HeaderName, StatusCode, header::CACHE_CONTROL},
     response::{IntoResponse, Response},
 };
 use uuid::Uuid;
@@ -15,6 +15,10 @@ use wog_middleware::{AppState, AuthClaims};
 
 use crate::errors::{RestApiError, RestApiResponseError};
 
+/// The catalog is public and changes rarely, so browsers (and any CDN) may reuse
+/// it briefly. Matches the server-side cache in `MarketplaceServices`.
+const CATALOG_CACHE_CONTROL: &str = "public, max-age=60, stale-while-revalidate=300";
+
 #[utoipa::path(
     get,
     path = "/api/v1/marketplace/apis",
@@ -25,9 +29,14 @@ use crate::errors::{RestApiError, RestApiResponseError};
     )
 )]
 #[axum::debug_handler]
-pub async fn list_apis(State(state): State<AppState>) -> Result<Json<Vec<ApiResponse>>, RestApiError> {
+pub async fn list_apis(
+    State(state): State<AppState>,
+) -> Result<([(HeaderName, &'static str); 1], Json<Vec<ApiResponse>>), RestApiError> {
     let apis = state.marketplace_services.list_apis().await?;
-    Ok(Json(apis.into_iter().map(Into::into).collect()))
+    Ok((
+        [(CACHE_CONTROL, CATALOG_CACHE_CONTROL)],
+        Json(apis.into_iter().map(Into::into).collect()),
+    ))
 }
 
 #[utoipa::path(
@@ -45,8 +54,11 @@ pub async fn list_apis(State(state): State<AppState>) -> Result<Json<Vec<ApiResp
 pub async fn get_api(
     State(state): State<AppState>,
     Path(slug): Path<String>,
-) -> Result<Json<ApiResponse>, RestApiError> {
-    Ok(Json(state.marketplace_services.get_api(&slug).await?.into()))
+) -> Result<([(HeaderName, &'static str); 1], Json<ApiResponse>), RestApiError> {
+    Ok((
+        [(CACHE_CONTROL, CATALOG_CACHE_CONTROL)],
+        Json(state.marketplace_services.get_api(&slug).await?.into()),
+    ))
 }
 
 #[utoipa::path(

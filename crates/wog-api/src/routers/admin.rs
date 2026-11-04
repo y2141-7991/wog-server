@@ -8,6 +8,7 @@ use wog_config::{
         AuditLogResponse, OverviewQuery, OverviewResponse, SetRoleRequest, UserDetailResponse,
         UsersQuery, UsersResponse,
     },
+    billing::dto::{AdminEventsResponse, AdminOrdersResponse, PaymentsQuery},
     user::dto::UserResponse,
 };
 use wog_middleware::{AdminClaims, AppState};
@@ -161,4 +162,75 @@ pub async fn get_audit_log(
 ) -> Result<Json<Vec<AuditLogResponse>>, RestApiError> {
     let entries = state.admin_services.audit_log().await?;
     Ok(Json(entries.into_iter().map(Into::into).collect()))
+}
+
+const PAYMENTS_PER_PAGE: i64 = 25;
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/payments/orders",
+    tag = "Admin",
+    params(PaymentsQuery),
+    responses(
+        (status = 200, description = "Payment orders, newest first", body = AdminOrdersResponse),
+        (status = 401, description = "Unauthorized", body = RestApiResponseError),
+        (status = 403, description = "Not an admin", body = RestApiResponseError),
+        (status = 500, description = "Internal error", body = RestApiResponseError),
+    ),
+    security(("bearer_auth" = []))
+)]
+#[axum::debug_handler]
+pub async fn list_payment_orders(
+    State(state): State<AppState>,
+    AdminClaims(_claims): AdminClaims,
+    Query(query): Query<PaymentsQuery>,
+) -> Result<Json<AdminOrdersResponse>, RestApiError> {
+    let page = query.page.unwrap_or(1).max(1);
+    let status = query.filter.as_deref().filter(|f| !f.is_empty());
+    let rows = state
+        .billing_services
+        .admin_orders(status, page, PAYMENTS_PER_PAGE)
+        .await?;
+    Ok(Json(AdminOrdersResponse::new(
+        rows,
+        page,
+        PAYMENTS_PER_PAGE,
+    )))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/payments/events",
+    tag = "Admin",
+    params(PaymentsQuery),
+    responses(
+        (status = 200, description = "Received payment notifications, newest first", body = AdminEventsResponse),
+        (status = 401, description = "Unauthorized", body = RestApiResponseError),
+        (status = 403, description = "Not an admin", body = RestApiResponseError),
+        (status = 500, description = "Internal error", body = RestApiResponseError),
+    ),
+    security(("bearer_auth" = []))
+)]
+#[axum::debug_handler]
+pub async fn list_payment_events(
+    State(state): State<AppState>,
+    AdminClaims(_claims): AdminClaims,
+    Query(query): Query<PaymentsQuery>,
+) -> Result<Json<AdminEventsResponse>, RestApiError> {
+    let page = query.page.unwrap_or(1).max(1);
+    let outcome = query.filter.as_deref().filter(|f| !f.is_empty());
+    let rows = state
+        .billing_services
+        .admin_events(
+            outcome,
+            query.needs_review.unwrap_or(false),
+            page,
+            PAYMENTS_PER_PAGE,
+        )
+        .await?;
+    Ok(Json(AdminEventsResponse::new(
+        rows,
+        page,
+        PAYMENTS_PER_PAGE,
+    )))
 }

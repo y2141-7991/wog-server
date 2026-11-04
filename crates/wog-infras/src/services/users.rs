@@ -105,7 +105,10 @@ impl UserServices {
     }
 
     /// Issue a new verification token for an already-authenticated, not-yet-verified user.
-    pub async fn resend_verification(&self, user_id: Uuid) -> Result<(User, String), DatabaseError> {
+    pub async fn resend_verification(
+        &self,
+        user_id: Uuid,
+    ) -> Result<(User, String), DatabaseError> {
         let user = self.get_user(user_id).await?;
         if user.email_verified {
             return Err(DatabaseError::ValidationError(
