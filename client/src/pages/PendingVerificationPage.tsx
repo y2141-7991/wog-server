@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { User } from '../types'
+import { BrandHeading } from '../components/BrandLogo'
 
 type ResendStatus = 'idle' | 'sending' | 'sent' | 'error'
 
@@ -24,7 +25,7 @@ export function PendingVerificationPage({ user, onResend, onLogout }: PendingVer
 
   return (
     <div className="container">
-      <h1>WoG</h1>
+      <BrandHeading />
       <div className="form-card auth-card">
         <h2>Check your email</h2>
         <p>

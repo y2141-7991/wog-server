@@ -155,4 +155,90 @@ impl UserRepository for PgUserRepo {
         .fetch_one(&self.pg_pool)
         .await?)
     }
+    async fn create_reset_token(
+        &self,
+        user_id: uuid::Uuid,
+        token_hash: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), DatabaseError> {
+        sqlx::query(
+            r#"
+                INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+                VALUES ($1, $2, $3)
+            "#,
+        )
+        .bind(user_id)
+        .bind(token_hash)
+        .bind(expires_at)
+        .execute(&self.pg_pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn count_reset_tokens_since(
+        &self,
+        user_id: uuid::Uuid,
+        since: DateTime<Utc>,
+    ) -> Result<i64, DatabaseError> {
+        Ok(sqlx::query_scalar::<_, i64>(
+            r#"
+                SELECT COUNT(*) FROM password_reset_tokens
+                WHERE user_id = $1 AND created_at >= $2
+            "#,
+        )
+        .bind(user_id)
+        .bind(since)
+        .fetch_one(&self.pg_pool)
+        .await?)
+    }
+
+    async fn reset_password_with_token(
+        &self,
+        token_hash: &str,
+        new_hash_pwd: &str,
+    ) -> Result<Option<User>, DatabaseError> {
+        let mut tx = self.pg_pool.begin().await?;
+
+        // Spending the token and checking it are one statement, so two
+        // concurrent requests with the same link cannot both succeed.
+        let spent: Option<uuid::Uuid> = sqlx::query_scalar(
+            r#"
+                UPDATE password_reset_tokens
+                SET used_at = NOW()
+                WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()
+                RETURNING user_id
+            "#,
+        )
+        .bind(token_hash)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(user_id) = spent else {
+            return Ok(None);
+        };
+
+        let user = sqlx::query_as::<_, User>(
+            r#"
+                UPDATE users
+                SET password = $2,
+                    must_change_password = FALSE,
+                    password_changed_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = $1
+                RETURNING *
+            "#,
+        )
+        .bind(user_id)
+        .bind(new_hash_pwd)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        // Any other link still in the inbox is now stale.
+        sqlx::query("DELETE FROM password_reset_tokens WHERE user_id = $1 AND used_at IS NULL")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(Some(user))
+    }
 }

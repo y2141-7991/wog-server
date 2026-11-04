@@ -6,8 +6,8 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use wog_middleware::AppState;
 
 use crate::routers::oauth::{
-    auth_me, change_password, google_callback, google_login, login, logout, refresh_token,
-    register, resend_verification, verify_email,
+    auth_me, change_password, forgot_password, google_callback, google_login, login, logout,
+    refresh_token, register, resend_verification, reset_password, verify_email,
 };
 
 pub mod admin;
@@ -35,6 +35,8 @@ pub fn oauth_routes() -> Router<AppState> {
         .route("/api/v1/auth/me", get(auth_me))
         .route("/api/v1/auth/refresh", post(refresh_token))
         .route("/api/v1/auth/change-password", post(change_password))
+        .route("/api/v1/auth/forgot-password", post(forgot_password))
+        .route("/api/v1/auth/reset-password", post(reset_password))
         .route("/api/v1/auth/logout", post(logout))
 }
 

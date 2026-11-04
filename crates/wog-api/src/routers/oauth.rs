@@ -8,13 +8,16 @@ use axum::{
 };
 use serde_json::json;
 use wog_config::user::dto::{
-    ChangePasswordRequest, LoginRequest, RegisterRequest, UserResponse, VerifyEmailRequest,
+    ChangePasswordRequest, ForgotPasswordRequest, LoginRequest, RegisterRequest,
+    ResetPasswordRequest, UserResponse, VerifyEmailRequest,
 };
-use wog_middleware::{AppState, AuthClaims};
+use wog_middleware::{AppState, AuthClaims, session_is_current};
 
 use axum_extra::extract::CookieJar;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
-use wog_infras::{Claims, DefaultConfig, TokenPair, TokenType};
+use wog_infras::{
+    Claims, DefaultConfig, TokenPair, TokenType, services::users::RESET_TOKEN_TTL_MINUTES,
+};
 
 use crate::errors::RestApiError;
 
@@ -288,6 +291,18 @@ pub async fn refresh_token(
         return Err(RestApiError::Unauthorized("Invalid token type".into()));
     }
 
+    // A password reset voids every session issued before it, refresh tokens included.
+    let user = state
+        .user_services
+        .get_user(token_data.claims.sub)
+        .await
+        .map_err(|_| RestApiError::Unauthorized("Account not found".into()))?;
+    if !session_is_current(&user, token_data.claims.iat) {
+        return Err(RestApiError::Unauthorized(
+            "Session expired, please sign in again".into(),
+        ));
+    }
+
     let token_pair = state
         .app_config
         .refresh_access_token(&token_data.claims)
@@ -303,6 +318,78 @@ pub async fn refresh_token(
     apply_auth_cookies(&mut response, &token_pair, &state.app_config.default_config);
 
     Ok(response)
+}
+
+/// Same answer whether or not the email is registered, so the form cannot be
+/// used to find out who has an account.
+const FORGOT_PASSWORD_MESSAGE: &str =
+    "If an account with that email exists, we have sent a link to reset its password.";
+
+/// Email a password-reset link. Always answers 200 with the same message; the
+/// email is sent in the background so the response time does not give the
+/// answer away either.
+pub async fn forgot_password(
+    State(state): State<AppState>,
+    Json(payload): Json<ForgotPasswordRequest>,
+) -> Result<impl IntoResponse, RestApiError> {
+    let email = payload.email.trim();
+    if email.is_empty() || email.len() > 254 {
+        return Err(RestApiError::BadRequest("Email is required".into()));
+    }
+
+    match state.user_services.request_password_reset(email).await {
+        Ok(Some((user, token))) => {
+            let reset_url = format!(
+                "{}/reset-password?token={}",
+                state.app_config.default_config.client_url, token
+            );
+            let email_service = state.email_service.clone();
+            tokio::spawn(async move {
+                if let Err(e) = email_service
+                    .send_password_reset_email(
+                        &user.email,
+                        &user.username,
+                        &reset_url,
+                        RESET_TOKEN_TTL_MINUTES,
+                    )
+                    .await
+                {
+                    tracing::warn!(user_id = %user.id, error = %e, "Failed to send password reset email");
+                }
+            });
+        }
+        Ok(None) => {}
+        // Not the caller's business: answering differently would leak.
+        Err(e) => tracing::error!(error = %e, "Password reset request failed"),
+    }
+
+    Ok(Json(json!({ "message": FORGOT_PASSWORD_MESSAGE })))
+}
+
+/// Set a new password with the token from the emailed link. The link works
+/// once; every session issued before this moment stops working.
+pub async fn reset_password(
+    State(state): State<AppState>,
+    Json(payload): Json<ResetPasswordRequest>,
+) -> Result<impl IntoResponse, RestApiError> {
+    let user = state
+        .user_services
+        .reset_password(&payload.token, &payload.new_password)
+        .await?;
+
+    let email_service = state.email_service.clone();
+    tokio::spawn(async move {
+        if let Err(e) = email_service
+            .send_password_changed_email(&user.email, &user.username)
+            .await
+        {
+            tracing::warn!(user_id = %user.id, error = %e, "Failed to send password changed email");
+        }
+    });
+
+    Ok(Json(
+        json!({ "message": "Password updated. Sign in with your new password." }),
+    ))
 }
 
 pub async fn logout() -> impl IntoResponse {

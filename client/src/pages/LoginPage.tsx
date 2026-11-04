@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { GoogleButton } from '../components/GoogleButton'
+import { BrandHeading } from '../components/BrandLogo'
 
 type Mode = 'login' | 'register'
 
@@ -8,9 +9,10 @@ interface LoginPageProps {
   onLogin: () => void
   onLoginWithPassword: (email: string, password: string) => Promise<void>
   onRegister: (username: string, email: string, password: string) => Promise<void>
+  onForgotPassword: () => void
 }
 
-export function LoginPage({ error, onLogin, onLoginWithPassword, onRegister }: LoginPageProps) {
+export function LoginPage({ error, onLogin, onLoginWithPassword, onRegister, onForgotPassword }: LoginPageProps) {
   const [mode, setMode] = useState<Mode>('login')
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -46,7 +48,7 @@ export function LoginPage({ error, onLogin, onLoginWithPassword, onRegister }: L
 
   return (
     <div className="container">
-      <h1>WoG</h1>
+      <BrandHeading />
       {error && <p className="error">{error}</p>}
 
       <div className="form-card auth-card">
@@ -98,6 +100,13 @@ export function LoginPage({ error, onLogin, onLoginWithPassword, onRegister }: L
               </button>
             </div>
           </label>
+          {mode === 'login' && (
+            <p className="auth-forgot">
+              <button type="button" className="link-btn" onClick={onForgotPassword}>
+                Forgot your password?
+              </button>
+            </p>
+          )}
           <button type="submit" className="auth-submit" disabled={submitting}>
             {submitting ? 'Please wait...' : mode === 'login' ? 'Sign in' : 'Create account'}
           </button>

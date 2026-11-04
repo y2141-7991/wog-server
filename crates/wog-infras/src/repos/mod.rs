@@ -64,6 +64,33 @@ pub trait UserRepository {
 
     /// Store a new password hash and clear the forced-change flag.
     async fn update_password(&self, user_id: Uuid, hash_pwd: &str) -> Result<User, DatabaseError>;
+
+    /// Store the SHA-256 (hex) of a password-reset token. The token itself is
+    /// never stored.
+    async fn create_reset_token(
+        &self,
+        user_id: Uuid,
+        token_hash: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), DatabaseError>;
+
+    /// How many reset links this account was issued since `since`.
+    async fn count_reset_tokens_since(
+        &self,
+        user_id: Uuid,
+        since: DateTime<Utc>,
+    ) -> Result<i64, DatabaseError>;
+
+    /// Spend a reset token and set the new password in one transaction:
+    /// the token must be unused and unexpired; the password is replaced, the
+    /// forced-change flag cleared, `password_changed_at` stamped (which voids
+    /// every earlier session) and the account's other open links deleted.
+    /// `None` when the token is unknown, already used, or expired.
+    async fn reset_password_with_token(
+        &self,
+        token_hash: &str,
+        new_hash_pwd: &str,
+    ) -> Result<Option<User>, DatabaseError>;
 }
 
 #[async_trait]

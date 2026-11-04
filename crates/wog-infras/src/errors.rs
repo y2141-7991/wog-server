@@ -22,6 +22,8 @@ pub enum DatabaseError {
     InvalidCredentials,
     #[error("Invalid or expired verification link")]
     InvalidVerificationToken,
+    #[error("Invalid or expired reset link")]
+    InvalidResetToken,
     #[error("Invalid or revoked API key")]
     InvalidApiKey,
     #[error("{0}")]

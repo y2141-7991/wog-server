@@ -48,7 +48,7 @@ SEPAY_ACCOUNT_HOLDER=
 SEPAY_PAYMENT_CODE_PREFIX=WOG
 ORDER_TTL_MINUTES=30
 
-# Optional: SMTP for the email-verification message
+# Optional: SMTP for the verification and password-reset emails
 SMTP_HOST=
 SMTP_PORT=587
 SMTP_USERNAME=
@@ -335,6 +335,35 @@ cargo run -p wog-api --bin support_cli -- --token "$(login bob@example.com <pass
 In terminal 2 type a message. The admin terminal prints a `conversation_updated` with the conversation id; in terminal 1 run `/join <id>` and `/to <id> hello alice`. Terminal 3 (bob) sees nothing of it. More commands are listed at the top of `crates/wog-api/src/bin/support_cli.rs` (`/typing`, `/read`, `/close`, `/raw {...}` for malformed input). The CLI speaks plain `ws://`; for `wss://` use `websocat -H "Authorization: Bearer $TOKEN" wss://host/api/v1/support/ws`.
 
 **Tests.** `cargo test -p wog-api --test support_chat` starts the real server per test on an ephemeral port with its own database (`DATABASE_URL` must point at a Postgres where you can create databases).
+
+## Forgot password
+
+On the sign-in page, **Forgot your password?** opens `/forgot-password`. The user enters their email and, if an account with a password exists for it, receives a link to `/reset-password`.
+
+- **Needs SMTP.** The link is sent by email, so `SMTP_*` must be configured (see Setup). Without SMTP the request still answers normally but nothing is sent, and the link is **never written to the log** (it is a credential; the verification link is the only one logged). To try the flow locally without a mail server, plant a token yourself (see "Try it locally" below).
+- **Same answer for everyone.** `POST /api/v1/auth/forgot-password` always returns `200` with the same message, whether or not the email is registered, and the email is sent in the background so the response time does not give it away either. Accounts that signed in with Google only (no password) get no email.
+- **The link.** 64 hex characters of randomness, valid for **30 minutes**, **single use**. Only its SHA-256 is stored (`password_reset_tokens.token_hash`), so a database leak does not leak working links. The page removes the token from the address bar as soon as it loads.
+- **Throttling.** One link per account per 60 seconds and at most 5 per hour, on top of the server-wide rate limit. Requests over the limit still answer `200` and send nothing.
+- **Resetting.** `POST /api/v1/auth/reset-password` with `{ "token", "new_password" }` (at least 8 characters). Spending the link and changing the password happen in one transaction, so two simultaneous requests cannot both succeed; the account's other open links are cancelled; the forced-password-change flag (default admin) is cleared. A wrong, expired or used link answers `400` with one generic message. A too-short password is rejected *before* the link is used, so the user can retry. The owner also gets a "your password was changed" email.
+- **Signed out everywhere.** A reset stamps `users.password_changed_at`. From then on, an access or refresh token issued before that moment is rejected with `401` on every route and the chat WebSocket (open sockets are closed within 30 seconds, at the next heartbeat). Tokens carry whole seconds, so a token issued in the same second as the reset can survive it; accounts that never reset have no cutoff, so the migration does not sign anyone out. Because of this, every authenticated request now reads the account row (it already did for admin and chat routes).
+- **Not done:** changing your password while signed in (`/auth/change-password`) does not sign other sessions out, and Google-only accounts cannot set a password through this flow.
+
+| Endpoint | Auth | Notes |
+|---|---|---|
+| `POST /api/v1/auth/forgot-password` | none | `{ "email" }`. Always `200`. |
+| `POST /api/v1/auth/reset-password` | none (the token) | `{ "token", "new_password" }`. `400` for a bad link or a short password. |
+
+**Try it locally** (no mail server needed): plant a token for an existing account, then open the page. Only the hash is stored, so pick any token text and hash it (`shasum -a 256` on macOS, `sha256sum` on Linux):
+
+```sh
+TOKEN=my-test-token
+HASH=$(printf %s "$TOKEN" | shasum -a 256 | cut -d' ' -f1)
+psql "$DATABASE_URL" -c "INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+  SELECT id, '$HASH', NOW() + interval '30 minutes' FROM users WHERE email = 'you@example.com'"
+# then open http://localhost:5173/reset-password?token=my-test-token
+```
+
+Tests: `cargo test -p wog-api --test password_reset` (needs `DATABASE_URL`, like the other integration tests).
 
 ## Crawler (`social-track-pipeline`)
 

@@ -37,6 +37,15 @@ main {
   flex-wrap: wrap;
 }
 
+.auth-actions {
+  display: flex;
+  justify-content: center;
+}
+.auth-forgot {
+  margin: -0.25rem 0 0;
+  text-align: right;
+  font-size: 0.9rem;
+}
 .auth-switch .link-btn + .link-btn {
   margin-left: 1rem;
 }
@@ -87,10 +96,32 @@ main {
 
 .navbar-title {
   justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   background: none;
   padding: 0;
   font-size: 1.15rem;
   font-weight: 700;
+}
+.navbar-title b {
+  font-weight: 700;
+  margin-right: -0.25rem;
+}
+.brand-heading {
+  margin: 0;
+  line-height: 0;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .navbar-title span {
   color: var(--muted);
@@ -499,6 +530,13 @@ pre code {
 .usage-row progress {
   width: 100%;
 }
+.usage-span {
+  grid-column: 2 / -1;
+}
+.bars-caption {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+}
 .bars {
   display: flex;
   align-items: flex-end;
@@ -650,6 +688,9 @@ pre code {
   }
   .usage-row {
     grid-template-columns: 1fr;
+  }
+  .usage-span {
+    grid-column: auto;
   }
 }
 
@@ -1327,7 +1368,7 @@ pre code {
 @media (max-width: 520px) {
   /* Admins have an extra Support link; keep the bar on one line. */
   .navbar { padding: 0.5rem 0.75rem; gap: 0.5rem; }
-  .navbar-title span { display: none; }
+  .navbar-title span, .navbar-title b { display: none; }
   .navbar-right { gap: 0.15rem; }
   .nav-link { padding: 0.4em 0.5em; font-size: 0.85rem; }
   .plan-pill { padding: 0.2em 0.5em; }

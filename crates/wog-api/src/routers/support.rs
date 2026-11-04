@@ -34,7 +34,7 @@ use wog_infras::{
     services::support::{ChatError, INBOX_PER_PAGE, SupportServices},
     support::{Audience, ChatRole, ClientEvent, ConnId, ServerEvent, WindowLimiter},
 };
-use wog_middleware::{AdminClaims, AdminError, AppState, VerifiedUser};
+use wog_middleware::{AdminClaims, AdminError, AppState, VerifiedUser, session_is_current};
 
 use crate::errors::{RestApiError, RestApiResponseError};
 
@@ -122,13 +122,17 @@ pub async fn support_ws(
         tracing::warn!(origin = ?origin, "Chat WebSocket refused: origin not allowed");
         return reject(StatusCode::FORBIDDEN, "Origin not allowed");
     }
-    let VerifiedUser { user, token_exp } = match auth {
+    let VerifiedUser {
+        user,
+        token_exp,
+        token_iat,
+    } = match auth {
         Ok(v) => v,
         Err(e) => return e.into_response(),
     };
     ws.max_message_size(MAX_FRAME_BYTES)
         .max_frame_size(MAX_FRAME_BYTES)
-        .on_upgrade(move |socket| run_connection(state, user, token_exp, socket))
+        .on_upgrade(move |socket| run_connection(state, user, token_exp, token_iat, socket))
 }
 
 struct Connection {
@@ -140,6 +144,8 @@ struct Connection {
     send_limit: WindowLimiter,
     frame_limit: WindowLimiter,
     strikes: u32,
+    /// When this connection's access token was issued (seconds).
+    token_iat: usize,
     /// A user's own conversation id, once known.
     own_conversation: Option<Uuid>,
     /// conversation id → owner, so typing/read events skip the database.
@@ -173,7 +179,13 @@ fn seconds_until(exp: usize) -> Duration {
     Duration::from_secs((exp as u64).saturating_sub(now))
 }
 
-async fn run_connection(state: AppState, user: User, token_exp: usize, mut socket: WebSocket) {
+async fn run_connection(
+    state: AppState,
+    user: User,
+    token_exp: usize,
+    token_iat: usize,
+    mut socket: WebSocket,
+) {
     let svc = state.support_services.clone();
     let role = if user.is_admin() {
         ChatRole::Admin
@@ -227,6 +239,7 @@ async fn run_connection(state: AppState, user: User, token_exp: usize, mut socke
         send_limit: WindowLimiter::new(SEND_LIMIT.0, SEND_LIMIT.1),
         frame_limit: WindowLimiter::new(FRAME_LIMIT.0, FRAME_LIMIT.1),
         strikes: 0,
+        token_iat,
         own_conversation,
         owners: HashMap::new(),
     };
@@ -252,8 +265,8 @@ async fn run_connection(state: AppState, user: User, token_exp: usize, mut socke
                     close(&mut socket, 1001, "idle timeout").await;
                     break;
                 }
-                if conn.role == ChatRole::Admin && !conn.still_admin().await {
-                    close(&mut socket, 1008, "no longer an admin").await;
+                if !conn.session_still_valid().await {
+                    close(&mut socket, 1008, "session no longer valid").await;
                     break;
                 }
                 if !write(&mut socket, Message::Ping(Vec::new().into())).await {
@@ -325,14 +338,18 @@ impl Connection {
         });
     }
 
-    /// The role is read from the database, never trusted from the token or
-    /// from when the socket opened, so a demotion cuts the connection off.
-    async fn still_admin(&self) -> bool {
+    /// The account is read from the database, never trusted from the token or
+    /// from when the socket opened: a demoted admin, a deleted account or a
+    /// password reset (which voids earlier sessions) cuts the connection off.
+    async fn session_still_valid(&self) -> bool {
         self.state
             .user_services
             .get_user(self.user.id)
             .await
-            .is_ok_and(|u| u.is_admin() && !u.must_change_password)
+            .is_ok_and(|u| {
+                session_is_current(&u, self.token_iat)
+                    && (self.role != ChatRole::Admin || (u.is_admin() && !u.must_change_password))
+            })
     }
 
     async fn handle_text(&mut self, text: &str) -> Flow {
@@ -365,7 +382,7 @@ impl Connection {
         // Everything an admin does is re-authorised against the database.
         if self.role == ChatRole::Admin
             && !matches!(event, ClientEvent::Ping)
-            && !self.still_admin().await
+            && !self.session_still_valid().await
         {
             self.reply(ServerEvent::error("forbidden", "Admin access required"));
             return Flow::Close(1008, "no longer an admin");

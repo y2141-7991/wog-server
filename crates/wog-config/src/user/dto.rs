@@ -24,6 +24,17 @@ pub struct ChangePasswordRequest {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
+pub struct ForgotPasswordRequest {
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ResetPasswordRequest {
+    pub token: String,
+    pub new_password: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct VerifyEmailRequest {
     pub token: String,
 }

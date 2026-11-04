@@ -97,3 +97,36 @@ export async function changePassword(currentPassword: string, newPassword: strin
   }
   return body as User
 }
+
+const FORGOT_PASSWORD_URL = `${API}/api/v1/auth/forgot-password`
+const RESET_PASSWORD_URL = `${API}/api/v1/auth/reset-password`
+
+/** Ask for a reset link. The answer is the same whether or not the email is registered. */
+export async function forgotPassword(email: string): Promise<string> {
+  const res = await fetch(FORGOT_PASSWORD_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(body.message || 'Could not send the reset link')
+  }
+  return (body as { message: string }).message
+}
+
+/** Set a new password with the token from the emailed link. Clears any stale session cookies. */
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  const res = await fetch(RESET_PASSWORD_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, new_password: newPassword }),
+    credentials: 'include',
+  })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(body.message || 'Could not reset the password')
+  }
+  // Every older session is void now; drop this browser's cookies too.
+  await logout().catch(() => undefined)
+}

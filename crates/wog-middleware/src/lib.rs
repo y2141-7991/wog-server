@@ -45,6 +45,8 @@ pub struct AdminClaims(pub Claims);
 pub struct VerifiedUser {
     pub user: User,
     pub token_exp: usize,
+    /// When the token was issued (seconds), for `session_is_current`.
+    pub token_iat: usize,
 }
 
 #[derive(Debug)]
@@ -73,14 +75,7 @@ impl FromRequestParts<AppState> for AdminClaims {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
-        let AuthClaims(claims) = AuthClaims::from_request_parts(parts, state)
-            .await
-            .map_err(AdminError::Auth)?;
-        let user = state
-            .user_services
-            .get_user(claims.sub)
-            .await
-            .map_err(|_| AdminError::Forbidden("Admin access required"))?;
+        let (claims, user) = authenticate(parts, state).await.map_err(AdminError::Auth)?;
         if !user.is_admin() {
             return Err(AdminError::Forbidden("Admin access required"));
         }
@@ -98,14 +93,7 @@ impl FromRequestParts<AppState> for VerifiedUser {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
-        let AuthClaims(claims) = AuthClaims::from_request_parts(parts, state)
-            .await
-            .map_err(AdminError::Auth)?;
-        let user = state
-            .user_services
-            .get_user(claims.sub)
-            .await
-            .map_err(|_| AdminError::Auth(AuthError("Account not found".into())))?;
+        let (claims, user) = authenticate(parts, state).await.map_err(AdminError::Auth)?;
         if !user.email_verified {
             return Err(AdminError::Forbidden("Verify your email first"));
         }
@@ -115,6 +103,7 @@ impl FromRequestParts<AppState> for VerifiedUser {
         Ok(VerifiedUser {
             user,
             token_exp: claims.exp,
+            token_iat: claims.iat,
         })
     }
 }
@@ -139,43 +128,75 @@ impl FromRequestParts<AppState> for AuthClaims {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
-        let token = parts
-            .headers
-            .get("Authorization")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.strip_prefix("Bearer "))
-            .map(|t| t.to_string());
-
-        let token = match token {
-            Some(t) => t,
-            None => {
-                let jar = CookieJar::from_headers(&parts.headers);
-                jar.get("token")
-                    .map(|c| c.value().to_string())
-                    .ok_or_else(|| AuthError("Missing authentication token".into()))?
-            }
-        };
-
-        let secret = &state.app_config.default_config.jwt_secret;
-        let token_data = decode::<Claims>(
-            &token,
-            &DecodingKey::from_secret(secret.as_bytes()),
-            &Validation::default(),
-        )
-        .map_err(|e| {
-            tracing::warn!(
-                method = %parts.method,
-                uri = %parts.uri,
-                "JWT validation failed: {}", e);
-            AuthError("Invalid or expired token".into())
-        })?;
-
-        if token_data.claims.token_type != TokenType::Access {
-            return Err(AuthError(
-                "Refresh token cannot be used for authentication".into(),
-            ));
-        }
-
-        Ok(AuthClaims(token_data.claims))
+        authenticate(parts, state)
+            .await
+            .map(|(claims, _user)| AuthClaims(claims))
     }
+}
+
+/// Check the token, then load the account and make sure the session still
+/// counts: the account exists and the token was not issued before a password
+/// reset. One database read, shared by every extractor.
+async fn authenticate(parts: &mut Parts, state: &AppState) -> Result<(Claims, User), AuthError> {
+    let claims = decode_access_token(parts, state)?;
+    let user = state
+        .user_services
+        .get_user(claims.sub)
+        .await
+        .map_err(|_| AuthError("Account not found".into()))?;
+    if !session_is_current(&user, claims.iat) {
+        return Err(AuthError("Session expired, please sign in again".into()));
+    }
+    Ok((claims, user))
+}
+
+/// A token is void when the password was reset after it was issued ("sign out
+/// everywhere"). Compared in whole seconds, the resolution of `iat`; an account
+/// that never reset its password has no cutoff.
+pub fn session_is_current(user: &User, token_iat: usize) -> bool {
+    match user.password_changed_at() {
+        Some(changed) => (token_iat as i64) >= changed.timestamp(),
+        None => true,
+    }
+}
+
+fn decode_access_token(parts: &Parts, state: &AppState) -> Result<Claims, AuthError> {
+    let token = parts
+        .headers
+        .get("Authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|t| t.to_string());
+
+    let token = match token {
+        Some(t) => t,
+        None => {
+            let jar = CookieJar::from_headers(&parts.headers);
+            jar.get("token")
+                .map(|c| c.value().to_string())
+                .ok_or_else(|| AuthError("Missing authentication token".into()))?
+        }
+    };
+
+    let secret = &state.app_config.default_config.jwt_secret;
+    let token_data = decode::<Claims>(
+        &token,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &Validation::default(),
+    )
+    .map_err(|e| {
+        tracing::warn!(
+            method = %parts.method,
+            uri = %parts.uri,
+            "JWT validation failed: {}", e);
+        AuthError("Invalid or expired token".into())
+    })?;
+
+    if token_data.claims.token_type != TokenType::Access {
+        return Err(AuthError(
+            "Refresh token cannot be used for authentication".into(),
+        ));
+    }
+
+    Ok(token_data.claims)
 }

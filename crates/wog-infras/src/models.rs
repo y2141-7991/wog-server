@@ -15,11 +15,18 @@ pub struct User {
     pub email_verified: bool,
     pub role: String,
     pub must_change_password: bool,
+    /// Set by a password reset. Sessions issued before this instant are void.
+    password_changed_at: Option<DateTime<Utc>>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
 
 impl User {
+    /// When the password was last reset; `None` if it never was.
+    pub fn password_changed_at(&self) -> Option<DateTime<Utc>> {
+        self.password_changed_at
+    }
+
     pub fn is_admin(&self) -> bool {
         self.role == "admin"
     }

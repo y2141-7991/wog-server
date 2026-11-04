@@ -1,5 +1,6 @@
 import { NEAR_LIMIT, usePlanStatus } from '../hooks/usePlanStatus'
 import type { User } from '../types'
+import { BrandLogo } from './BrandLogo'
 
 interface NavbarProps {
   user: User
@@ -20,7 +21,10 @@ export function Navbar({ user, onHome, onDashboard, onAdmin, onSupport, supportU
   const plan = usePlanStatus(planRefreshKey)
   return (
     <nav className="navbar">
-      <button className="navbar-title" onClick={onHome}>WoG <span>API Hub</span></button>
+      <button className="navbar-title" onClick={onHome} aria-label="WoG API Hub, home">
+        <BrandLogo size={30} />
+        <b>WoG</b> <span>API Hub</span>
+      </button>
       <div className="navbar-right">
         <button className="nav-link" onClick={onDashboard}>Dashboard</button>
         {onAdmin && <button className="nav-link" onClick={onAdmin}>Admin</button>}

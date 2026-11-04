@@ -29,7 +29,9 @@ pub struct EmailService {
 impl EmailService {
     pub fn new(config: &DefaultConfig) -> Self {
         let transport = if config.smtp_host.trim().is_empty() {
-            tracing::warn!("SMTP_HOST is not set; verification emails will only be logged");
+            tracing::warn!(
+                "SMTP_HOST is not set; emails are not sent (verification links are logged, password reset links never are)"
+            );
             None
         } else {
             match AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&config.smtp_host) {
@@ -62,12 +64,115 @@ impl EmailService {
         to_username: &str,
         verify_url: &str,
     ) -> Result<(), EmailError> {
-        let Some(transport) = &self.transport else {
+        if self.transport.is_none() {
             tracing::info!(
                 email = %to_email,
                 url = %verify_url,
                 "SMTP not configured; skipping verification email send"
             );
+            return Ok(());
+        }
+
+        let text_body = format!(
+            "Hi {to_username},\n\n\
+             Please verify your email address by opening the link below:\n\n\
+             {verify_url}\n\n\
+             This link expires in 24 hours. If you didn't create this account, you can ignore this email.\n"
+        );
+        let html_body = format!(
+            "<p>Hi {to_username},</p>\
+             <p>Please verify your email address by clicking the link below:</p>\
+             <p><a href=\"{verify_url}\">Verify my email</a></p>\
+             <p>This link expires in 24 hours. If you didn't create this account, you can ignore this email.</p>"
+        );
+        self.send(
+            to_email,
+            to_username,
+            "Verify your email",
+            text_body,
+            html_body,
+        )
+        .await
+    }
+
+    /// The "reset your password" email. Unlike the verification email, the link
+    /// is never logged, with or without SMTP: it is a credential.
+    pub async fn send_password_reset_email(
+        &self,
+        to_email: &str,
+        to_username: &str,
+        reset_url: &str,
+        valid_minutes: i64,
+    ) -> Result<(), EmailError> {
+        if self.transport.is_none() {
+            tracing::warn!("SMTP not configured; the password reset email was not sent");
+            return Ok(());
+        }
+
+        let name = html_escape(to_username);
+        let text_body = format!(
+            "Hi {to_username},\n\n\
+             Someone asked to reset the password of your account. To choose a new one, open the link below:\n\n\
+             {reset_url}\n\n\
+             This link works once and expires in {valid_minutes} minutes. If you didn't ask for this, ignore this email: your password has not changed.\n"
+        );
+        let html_body = format!(
+            "<p>Hi {name},</p>\
+             <p>Someone asked to reset the password of your account. To choose a new one, click the link below:</p>\
+             <p><a href=\"{reset_url}\">Reset my password</a></p>\
+             <p>This link works once and expires in {valid_minutes} minutes. If you didn't ask for this, ignore this email: your password has not changed.</p>"
+        );
+        self.send(
+            to_email,
+            to_username,
+            "Reset your password",
+            text_body,
+            html_body,
+        )
+        .await
+    }
+
+    /// Tell the owner their password was just changed through a reset, so an
+    /// unexpected one is noticed.
+    pub async fn send_password_changed_email(
+        &self,
+        to_email: &str,
+        to_username: &str,
+    ) -> Result<(), EmailError> {
+        if self.transport.is_none() {
+            return Ok(());
+        }
+
+        let name = html_escape(to_username);
+        let text_body = format!(
+            "Hi {to_username},\n\n\
+             The password of your account was just changed and you were signed out everywhere.\n\n\
+             If this was you, there is nothing to do. If it wasn't, reset your password again right away.\n"
+        );
+        let html_body = format!(
+            "<p>Hi {name},</p>\
+             <p>The password of your account was just changed and you were signed out everywhere.</p>\
+             <p>If this was you, there is nothing to do. If it wasn't, reset your password again right away.</p>"
+        );
+        self.send(
+            to_email,
+            to_username,
+            "Your password was changed",
+            text_body,
+            html_body,
+        )
+        .await
+    }
+
+    async fn send(
+        &self,
+        to_email: &str,
+        to_username: &str,
+        subject: &str,
+        text_body: String,
+        html_body: String,
+    ) -> Result<(), EmailError> {
+        let Some(transport) = &self.transport else {
             return Ok(());
         };
 
@@ -86,23 +191,10 @@ impl EmailService {
             .map_err(|e| EmailError::Build(format!("Invalid to address '{to_email}': {e}")))?;
         let to = Mailbox::new(Some(to_username.to_string()), to_address);
 
-        let text_body = format!(
-            "Hi {to_username},\n\n\
-             Please verify your email address by opening the link below:\n\n\
-             {verify_url}\n\n\
-             This link expires in 24 hours. If you didn't create this account, you can ignore this email.\n"
-        );
-        let html_body = format!(
-            "<p>Hi {to_username},</p>\
-             <p>Please verify your email address by clicking the link below:</p>\
-             <p><a href=\"{verify_url}\">Verify my email</a></p>\
-             <p>This link expires in 24 hours. If you didn't create this account, you can ignore this email.</p>"
-        );
-
         let email = Message::builder()
             .from(from)
             .to(to)
-            .subject("Verify your email")
+            .subject(subject)
             .multipart(MultiPart::alternative_plain_html(text_body, html_body))
             .map_err(|e| EmailError::Build(e.to_string()))?;
 
@@ -112,4 +204,11 @@ impl EmailService {
             .map(|_| ())
             .map_err(|e| EmailError::Send(e.to_string()))
     }
+}
+
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }

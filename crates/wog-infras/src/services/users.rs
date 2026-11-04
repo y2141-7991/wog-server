@@ -1,4 +1,5 @@
 use chrono::{Duration, Utc};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
@@ -9,6 +10,23 @@ use crate::{
 };
 
 pub const MIN_PASSWORD_LEN: usize = 8;
+
+/// How long an emailed reset link works.
+pub const RESET_TOKEN_TTL_MINUTES: i64 = 30;
+/// An account gets at most one new link per this many seconds...
+const RESET_COOLDOWN_SECONDS: i64 = 60;
+/// ...and at most this many per hour, so the form cannot be used to flood an inbox.
+const RESET_MAX_PER_HOUR: i64 = 5;
+
+/// What is stored (and looked up) for a reset token: its SHA-256 as lowercase hex.
+pub fn hash_reset_token(token: &str) -> String {
+    format!("{:x}", Sha256::digest(token.trim().as_bytes()))
+}
+
+/// 244 random bits from the OS generator (two v4 UUIDs), as 64 hex characters.
+fn new_reset_token() -> String {
+    format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
+}
 
 #[derive(Clone)]
 pub struct UserServices {
@@ -149,5 +167,69 @@ impl UserServices {
         self.user_repo
             .update_password(user_id, &hash_password(new)?)
             .await
+    }
+    /// Start a password reset for `email`.
+    ///
+    /// Returns the account and the plain token to put in the emailed link, or
+    /// `None` when nothing should be sent: the email is unknown, the account
+    /// has no password (it signed in with Google only), or it asked too
+    /// recently. The caller answers the same way in every case, so the form
+    /// never reveals whether an email is registered.
+    pub async fn request_password_reset(
+        &self,
+        email: &str,
+    ) -> Result<Option<(User, String)>, DatabaseError> {
+        let email = email.trim();
+        if email.is_empty() {
+            return Ok(None);
+        }
+        let Some(user) = self.user_repo.find_by_email(email).await? else {
+            return Ok(None);
+        };
+        if user.password_hash().is_none() {
+            return Ok(None);
+        }
+
+        let now = Utc::now();
+        if self
+            .user_repo
+            .count_reset_tokens_since(user.id, now - Duration::seconds(RESET_COOLDOWN_SECONDS))
+            .await?
+            > 0
+            || self
+                .user_repo
+                .count_reset_tokens_since(user.id, now - Duration::hours(1))
+                .await?
+                >= RESET_MAX_PER_HOUR
+        {
+            return Ok(None);
+        }
+
+        let token = new_reset_token();
+        self.user_repo
+            .create_reset_token(
+                user.id,
+                &hash_reset_token(&token),
+                now + Duration::minutes(RESET_TOKEN_TTL_MINUTES),
+            )
+            .await?;
+        Ok(Some((user, token)))
+    }
+
+    /// Finish a reset: spend the token, set the new password and void every
+    /// session issued before now.
+    pub async fn reset_password(&self, token: &str, new: &str) -> Result<User, DatabaseError> {
+        if new.chars().count() < MIN_PASSWORD_LEN {
+            return Err(DatabaseError::ValidationError(format!(
+                "Password must be at least {MIN_PASSWORD_LEN} characters"
+            )));
+        }
+        if token.trim().is_empty() {
+            return Err(DatabaseError::InvalidResetToken);
+        }
+        self.user_repo
+            .reset_password_with_token(&hash_reset_token(token), &hash_password(new)?)
+            .await?
+            .ok_or(DatabaseError::InvalidResetToken)
     }
 }

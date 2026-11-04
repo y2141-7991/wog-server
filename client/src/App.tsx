@@ -10,6 +10,8 @@ import { ChangePasswordPage } from './pages/ChangePasswordPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { VerifyEmailPage } from './pages/VerifyEmailPage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { PendingVerificationPage } from './pages/PendingVerificationPage'
 import { AdminSupportPage } from './pages/AdminSupportPage'
 import { SupportChatWidget } from './components/SupportChatWidget'
@@ -24,6 +26,8 @@ type Page =
   | { name: 'profile' }
   | { name: 'change-password' }
   | { name: 'verify-email' }
+  | { name: 'forgot-password' }
+  | { name: 'reset-password' }
 
 function pathToPage(): Page {
   const path = window.location.pathname
@@ -33,6 +37,8 @@ function pathToPage(): Page {
   if (path === '/admin/support') return { name: 'admin-support' }
   if (path === '/admin') return { name: 'admin', userId: new URLSearchParams(window.location.search).get('user') ?? undefined }
   if (path === '/verify-email') return { name: 'verify-email' }
+  if (path === '/forgot-password') return { name: 'forgot-password' }
+  if (path === '/reset-password') return { name: 'reset-password' }
   if (path.startsWith('/apis/')) return { name: 'api', slug: decodeURIComponent(path.slice('/apis/'.length)) }
   return { name: 'home' }
 }
@@ -44,6 +50,8 @@ function pageToPath(p: Page): string {
     case 'dashboard': return '/dashboard'
     case 'admin': return p.userId ? `/admin?user=${encodeURIComponent(p.userId)}` : '/admin'
     case 'admin-support': return '/admin/support'
+    case 'forgot-password': return '/forgot-password'
+    case 'reset-password': return '/reset-password'
     case 'api': return `/apis/${encodeURIComponent(p.slug)}`
     default: return '/'
   }
@@ -76,6 +84,15 @@ function App() {
     return <VerifyEmailPage onVerify={verifyEmail} onContinue={goHome} />
   }
 
+  // Reachable signed in or out: the emailed link may be opened in either state.
+  if (page.name === 'forgot-password') {
+    return <ForgotPasswordPage onBack={goHome} />
+  }
+  if (page.name === 'reset-password') {
+    // A full load, so a stale signed-in state cannot survive the reset.
+    return <ResetPasswordPage onForgot={() => navigate({ name: 'forgot-password' })} onDone={() => window.location.assign('/')} />
+  }
+
   if (loading) {
     return <div className="container"><p>Loading...</p></div>
   }
@@ -87,6 +104,7 @@ function App() {
         onLogin={login}
         onLoginWithPassword={loginWithPassword}
         onRegister={register}
+        onForgotPassword={() => navigate({ name: 'forgot-password' })}
       />
     )
   }

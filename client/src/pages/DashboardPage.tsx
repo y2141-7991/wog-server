@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
+import { fetchSubscription } from '../api/billing'
 import { createKey, fetchKeys, fetchUsage, revokeKey, saveKey } from '../api/marketplace'
 import { CopyButton } from '../components/CopyButton'
 import { NEAR_LIMIT, usePlanStatus } from '../hooks/usePlanStatus'
-import type { ApiKey, UsageResponse } from '../types'
+import type { ApiKey, Subscription, UsageResponse } from '../types'
 
 export function DashboardPage({ onUpgrade }: { onUpgrade: () => void }) {
   const plan = usePlanStatus('dashboard')
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [usage, setUsage] = useState<UsageResponse | null>(null)
+  const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [keyName, setKeyName] = useState('')
   const [newSecret, setNewSecret] = useState<string | null>(null)
@@ -16,11 +18,12 @@ export function DashboardPage({ onUpgrade }: { onUpgrade: () => void }) {
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([fetchKeys(), fetchUsage()])
-      .then(([k, u]) => {
+    Promise.all([fetchKeys(), fetchUsage(), fetchSubscription().catch(() => null)])
+      .then(([k, u, sub]) => {
         if (!cancelled) {
           setKeys(k)
           setUsage(u)
+          setSubscription(sub)
         }
       })
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Could not load the dashboard'))
@@ -39,7 +42,11 @@ export function DashboardPage({ onUpgrade }: { onUpgrade: () => void }) {
     }
   }
 
-  const maxDay = Math.max(1, ...(usage?.by_day.map((d) => d.requests) ?? [1]))
+  const maxDay = Math.max(0, ...(usage?.by_day.map((d) => d.requests) ?? [0]))
+  // A paid plan has one quota shared by every API; per-API quotas only apply to the free tier.
+  const pool = subscription?.plan && subscription.usage.quota
+    ? { used: subscription.usage.used, quota: subscription.usage.quota }
+    : null
 
   return (
     <div className="detail">
@@ -102,20 +109,45 @@ export function DashboardPage({ onUpgrade }: { onUpgrade: () => void }) {
 
       <section className="panel">
         <h3>Usage — last {usage?.days ?? 30} days</h3>
-        {usage?.by_api.map((u) => (
-          <div key={u.slug} className="usage-row">
-            <span>{u.name}</span>
-            <progress value={u.used_this_month} max={u.monthly_quota} />
+        {pool && (
+          <div className="usage-row">
+            <span>{subscription?.plan?.name} plan</span>
+            <progress value={pool.used} max={pool.quota} />
             <span className="text-muted">
-              {u.used_this_month.toLocaleString()} / {u.monthly_quota.toLocaleString()} this month · {u.requests} requests, {u.errors} errors
+              {pool.used.toLocaleString()} / {pool.quota.toLocaleString()} requests in this period, shared by all APIs
+              {subscription?.plan && ` · until ${new Date(subscription.plan.current_period_end).toLocaleDateString()}`}
             </span>
           </div>
-        ))}
-        <div className="bars">
-          {usage?.by_day.map((d) => (
-            <div key={d.day} title={`${d.day}: ${d.requests}`} style={{ height: `${(d.requests / maxDay) * 100}%` }} />
-          ))}
-        </div>
+        )}
+        {usage?.by_api.map((u) =>
+          pool ? (
+            <div key={u.slug} className="usage-row">
+              <span>{u.name}</span>
+              <span className="text-muted usage-span">{u.requests.toLocaleString()} requests, {u.errors.toLocaleString()} errors</span>
+            </div>
+          ) : (
+            <div key={u.slug} className="usage-row">
+              <span>{u.name}</span>
+              <progress value={u.used_this_month} max={u.monthly_quota} />
+              <span className="text-muted">
+                {u.used_this_month.toLocaleString()} / {u.monthly_quota.toLocaleString()} this month · {u.requests} requests, {u.errors} errors
+              </span>
+            </div>
+          ),
+        )}
+        <h4>Requests per day</h4>
+        {maxDay > 0 ? (
+          <>
+            <div className="bars">
+              {usage?.by_day.map((d) => (
+                <div key={d.day} title={`${d.day}: ${d.requests}`} style={{ height: `${(d.requests / maxDay) * 100}%` }} />
+              ))}
+            </div>
+            <p className="text-muted bars-caption">Busiest day: {maxDay.toLocaleString()} requests</p>
+          </>
+        ) : (
+          <p className="text-muted">No requests yet.</p>
+        )}
       </section>
     </div>
   )

@@ -111,6 +111,9 @@ impl From<DatabaseError> for RestApiError {
             DatabaseError::InvalidVerificationToken => {
                 RestApiError::BadRequest("Invalid or expired verification link".into())
             }
+            DatabaseError::InvalidResetToken => {
+                RestApiError::BadRequest("This reset link is invalid or has expired".into())
+            }
             DatabaseError::ValidationError(msg) => RestApiError::BadRequest(msg),
             DatabaseError::InvalidApiKey => {
                 RestApiError::Unauthorized("Invalid or revoked API key".into())

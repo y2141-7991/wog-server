@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { User } from '../types'
+import { BrandHeading } from '../components/BrandLogo'
 
 type Status = 'verifying' | 'success' | 'error'
 
@@ -32,7 +33,7 @@ export function VerifyEmailPage({ onVerify, onContinue }: VerifyEmailPageProps) 
 
   return (
     <div className="container">
-      <h1>WoG</h1>
+      <BrandHeading />
       <div className="form-card auth-card">
         {status === 'verifying' && <p>Verifying your email...</p>}
         {status === 'success' && (

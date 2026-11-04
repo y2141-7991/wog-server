@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { readCatalog } from '../api/catalogCache'
+import { fetchSubscription } from '../api/billing'
 import { fetchApi } from '../api/marketplace'
 import { ApiAvatar } from '../components/ApiCard'
 import { TryIt } from '../components/TryIt'
 import { timeAgo } from '../lib/format'
-import type { MarketplaceApi } from '../types'
+import type { MarketplaceApi, Subscription } from '../types'
 
 const GATEWAY = import.meta.env.VITE_API_URL || window.location.origin
 
@@ -43,6 +44,18 @@ export function ApiDetailPage({ slug, onBack, onDashboard }: { slug: string; onB
   const [api, setApi] = useState<MarketplaceApi | null>(() => readCatalog()?.find((a) => a.slug === slug) ?? null)
   const [error, setError] = useState<string | null>(null)
   const [lang, setLang] = useState<Lang>('curl')
+  // `undefined` until loaded; `null` if it could not be loaded (the free-tier text is the safe fallback).
+  const [subscription, setSubscription] = useState<Subscription | null | undefined>(undefined)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchSubscription()
+      .then((s) => !cancelled && setSubscription(s))
+      .catch(() => !cancelled && setSubscription(null))
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -110,14 +123,30 @@ export function ApiDetailPage({ slug, onBack, onDashboard }: { slug: string; onB
             )}
           </section>
 
-          <section className="panel">
-            <h3>Free plan</h3>
-            <p>
-              {api.monthly_quota.toLocaleString()} requests per month · {api.rate_limit_per_minute} requests per minute.
-              Create a key on the <button className="link-btn" onClick={onDashboard}>dashboard</button>.
-              Paid plans (Basic, Pro, Ultra) replace these limits with a larger quota shared by all APIs.
-            </p>
-          </section>
+          {subscription !== undefined && (
+            <section className="panel">
+              {subscription?.plan ? (
+                <>
+                  <h3>{subscription.plan.name} plan</h3>
+                  <p>
+                    {subscription.plan.monthly_quota.toLocaleString()} requests per month, shared by all APIs ·{' '}
+                    {subscription.plan.rate_limit_per_minute} requests per minute.
+                    Active until {new Date(subscription.plan.current_period_end).toLocaleDateString()}.
+                    See your usage on the <button className="link-btn" onClick={onDashboard}>dashboard</button>.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h3>Free plan</h3>
+                  <p>
+                    {api.monthly_quota.toLocaleString()} requests per month · {api.rate_limit_per_minute} requests per minute.
+                    Create a key on the <button className="link-btn" onClick={onDashboard}>dashboard</button>.
+                    Paid plans (Basic, Pro, Ultra) replace these limits with a larger quota shared by all APIs.
+                  </p>
+                </>
+              )}
+            </section>
+          )}
         </div>
 
         <TryIt api={api} />
