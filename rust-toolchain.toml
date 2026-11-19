@@ -1,0 +1,7 @@
+# One Rust version for local builds, CI and the Docker image (keep the Dockerfile's
+# `FROM rust:<version>-bookworm` in step). rustup installs it automatically.
+# Upgrade deliberately: bump here and in the Dockerfile, then fix new clippy lints.
+[toolchain]
+channel = "1.100.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

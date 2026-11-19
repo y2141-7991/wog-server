@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
 # ---- Build -----------------------------------------------------------------
-FROM rust:1-bookworm AS builder
+# Keep in step with rust-toolchain.toml.
+FROM rust:1.100.0-bookworm AS builder
 
 WORKDIR /app
 

@@ -1,0 +1,4 @@
+# axum handlers return `Result<Response, Response>`, and `Response` is 128 bytes,
+# exactly clippy's default limit for `result_large_err`. Allow one Response-sized
+# error; anything bigger is still flagged.
+large-error-threshold = 136
