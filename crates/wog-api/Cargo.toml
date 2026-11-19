@@ -24,7 +24,7 @@ tracing-subscriber = { version = "0.3.22", features = ["env-filter", "json"] }
 tracing-log = "0.2.0"
 envconfig = "0.11.1"
 tower = { version = "0.5", features = ["full"] }
-tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }
+tower-http = { version = "0.7", features = ["cors", "fs", "trace"] }
 utoipa = { version = "5.4.0", features = ["uuid", "chrono", "axum_extras"] }
 serde = { version = "1.0.228", features = ["derive"] }
 utoipa-axum = "0.2.0"
