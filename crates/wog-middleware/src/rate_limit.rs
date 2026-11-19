@@ -73,19 +73,18 @@ impl RateLimiter {
 
 fn extract_client_key(req: &Request) -> String {
     // Try X-Forwarded-For first (behind reverse proxy)
-    if let Some(forwarded) = req.headers().get("x-forwarded-for") {
-        if let Ok(val) = forwarded.to_str() {
-            if let Some(ip) = val.split(',').next() {
-                return ip.trim().to_string();
-            }
-        }
+    if let Some(forwarded) = req.headers().get("x-forwarded-for")
+        && let Ok(val) = forwarded.to_str()
+        && let Some(ip) = val.split(',').next()
+    {
+        return ip.trim().to_string();
     }
 
     // Try X-Real-Ip
-    if let Some(real_ip) = req.headers().get("x-real-ip") {
-        if let Ok(val) = real_ip.to_str() {
-            return val.trim().to_string();
-        }
+    if let Some(real_ip) = req.headers().get("x-real-ip")
+        && let Ok(val) = real_ip.to_str()
+    {
+        return val.trim().to_string();
     }
 
     // Fallback to User-Agent (not ideal, but better than nothing)
@@ -112,12 +111,7 @@ pub async fn rate_limit_middleware(
     let (limit, remaining, reset_in) = limiter.check(&key);
     let reset_secs = reset_in.as_secs();
 
-    if remaining == 0
-        && limiter
-            .buckets
-            .get(&key)
-            .map_or(false, |b| b.remaining == 0)
-    {
+    if remaining == 0 && limiter.buckets.get(&key).is_some_and(|b| b.remaining == 0) {
         tracing::warn!(
             client = %key,
             user_agent = %user_agent,

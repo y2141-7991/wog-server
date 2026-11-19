@@ -5,12 +5,13 @@ import type {
   AuditLogEntry,
   User,
 } from '../types'
+import { apiFetch } from './http'
 
 const API = import.meta.env.VITE_API_URL || ''
 const BASE = `${API}/api/v1/admin`
 
 async function request<T>(path: string, init: RequestInit, failure: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { credentials: 'include', ...init })
+  const res = await apiFetch(`${BASE}${path}`, init)
   const body = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(body.message || failure)
   return body as T

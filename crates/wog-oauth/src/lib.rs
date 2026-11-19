@@ -39,17 +39,13 @@ pub enum ResponseError {
 
 impl From<ResponseError> for OAuthServiceError {
     fn from(value: ResponseError) -> Self {
-        match value {
-            other => OAuthServiceError::ParseError(other.to_string()),
-        }
+        OAuthServiceError::ParseError(value.to_string())
     }
 }
 
 impl From<anyhow::Error> for OAuthServiceError {
     fn from(value: anyhow::Error) -> Self {
-        match value {
-            other => OAuthServiceError::ProviderApi(other.to_string()),
-        }
+        OAuthServiceError::ProviderApi(value.to_string())
     }
 }
 
@@ -63,23 +59,11 @@ pub struct OAuthTokens {
 impl From<BasicTokenResponse> for OAuthTokens {
     fn from(response: BasicTokenResponse) -> Self {
         OAuthTokens {
-            access_token: String::from(response.access_token().secret().to_owned()),
+            access_token: response.access_token().secret().to_owned(),
             refresh_token: response.refresh_token().map(|t| t.secret().to_owned()),
             expires_in: response.expires_in(),
         }
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum OAuthProvider {
-    Google,
-}
-
-pub struct OAuthUser {
-    email: String,
-    name: String,
-    sub: String,
-    exp: i64,
 }
 
 #[derive(Deserialize)]
@@ -103,7 +87,6 @@ pub struct EnvConf {
 
 #[derive(Debug, Clone)]
 pub struct OAuthConfig {
-    provider: OAuthProvider,
     client_id: String,
     client_secret: String,
     auth_url: String,
@@ -124,7 +107,6 @@ impl OAuthConfig {
     pub fn new(provider: &str, env_conf: EnvConf) -> Result<Self> {
         match provider {
             "google" => Ok(Self {
-                provider: OAuthProvider::Google,
                 client_id: env_conf.google_client_id,
                 client_secret: env_conf.google_client_secret,
                 auth_url: "https://accounts.google.com/o/oauth2/v2/auth".to_owned(),
@@ -197,8 +179,8 @@ impl OAuthService {
         let (auth_url, _csrf_token) = client.add_extra_param("access_type", "offline").url();
         AuthorizeUrl {
             url: auth_url.to_string(),
-            crsf_token: String::from(_csrf_token.secret().to_owned()),
-            pkce_verifier: String::from(pkce_code_verifier.secret().to_owned()),
+            crsf_token: _csrf_token.secret().to_owned(),
+            pkce_verifier: pkce_code_verifier.secret().to_owned(),
         }
     }
 

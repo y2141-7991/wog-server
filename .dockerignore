@@ -1,6 +1,16 @@
+# Build output and dependencies
 target/
-client/node_modules/
-client/dist/
+client/
 .git/
 .claude/
+.vercel/
+
+# Secrets and local config never go into the build context
 .env
+.env.*
+!.env.example
+
+# Not needed to build the server
+README.md
+scripts/
+.sqlx/

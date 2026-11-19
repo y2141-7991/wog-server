@@ -1,44 +1,33 @@
-import { useCallback, useEffect, useState } from 'react'
-import { fetchSubscription } from '../api/billing'
-import { createKey, fetchKeys, fetchUsage, revokeKey, saveKey } from '../api/marketplace'
+import { useState } from 'react'
+import { saveKey } from '../api/marketplace'
+import { useCreateKey, useKeys, useRevokeKey, useSubscription, useUsage } from '../api/queries'
 import { CopyButton } from '../components/CopyButton'
 import { NEAR_LIMIT, usePlanStatus } from '../hooks/usePlanStatus'
-import type { ApiKey, Subscription, UsageResponse } from '../types'
 
 export function DashboardPage({ onUpgrade }: { onUpgrade: () => void }) {
-  const plan = usePlanStatus('dashboard')
-  const [keys, setKeys] = useState<ApiKey[]>([])
-  const [usage, setUsage] = useState<UsageResponse | null>(null)
-  const [subscription, setSubscription] = useState<Subscription | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // Plan, usage and keys come from the shared query cache: the navbar badge reads the
+  // same copies, so a new key or a purchase shows up in both without extra requests.
+  const plan = usePlanStatus()
+  const keysQuery = useKeys()
+  const usageQuery = useUsage()
+  const subscription = useSubscription().data ?? null
+  const createKey = useCreateKey()
+  const revokeKey = useRevokeKey()
+  const keys = keysQuery.data ?? []
+  const usage = usageQuery.data ?? null
+  const [actionError, setActionError] = useState<string | null>(null)
   const [keyName, setKeyName] = useState('')
   const [newSecret, setNewSecret] = useState<string | null>(null)
 
-  const refreshKeys = useCallback(() => fetchKeys().then(setKeys), [])
-
-  useEffect(() => {
-    let cancelled = false
-    Promise.all([fetchKeys(), fetchUsage(), fetchSubscription().catch(() => null)])
-      .then(([k, u, sub]) => {
-        if (!cancelled) {
-          setKeys(k)
-          setUsage(u)
-          setSubscription(sub)
-        }
-      })
-      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Could not load the dashboard'))
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  const loadError = keysQuery.error ?? usageQuery.error
+  const error = actionError ?? (loadError ? loadError.message || 'Could not load the dashboard' : null)
 
   async function act(action: () => Promise<unknown>) {
-    setError(null)
+    setActionError(null)
     try {
       await action()
-      await refreshKeys()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong')
+      setActionError(err instanceof Error ? err.message : 'Something went wrong')
     }
   }
 
@@ -76,7 +65,7 @@ export function DashboardPage({ onUpgrade }: { onUpgrade: () => void }) {
           onSubmit={(e) => {
             e.preventDefault()
             void act(async () => {
-              const created = await createKey(keyName.trim())
+              const created = await createKey.mutateAsync(keyName.trim())
               setNewSecret(created.secret)
               saveKey(created.secret)
               setKeyName('')
@@ -97,7 +86,7 @@ export function DashboardPage({ onUpgrade }: { onUpgrade: () => void }) {
                   {k.revoked_at ? (
                     <span className="text-muted">Revoked</span>
                   ) : (
-                    <button className="btn-secondary btn-sm" onClick={() => void act(() => revokeKey(k.id))}>Revoke</button>
+                    <button className="btn-secondary btn-sm" onClick={() => void act(() => revokeKey.mutateAsync(k.id))}>Revoke</button>
                   )}
                 </td>
               </tr>

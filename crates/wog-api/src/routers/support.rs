@@ -1,11 +1,12 @@
 //! Support chat: the WebSocket endpoint and its REST companions.
 //!
-//! The WebSocket is authenticated by the same `token` cookie as every HTTP
-//! route (browsers send it on the same-origin handshake and cannot set an
-//! `Authorization` header), so no token ever appears in a URL. Because a
-//! cookie is sent automatically, the handshake also checks `Origin` against an
-//! allowlist (cross-site WebSocket hijacking). Non-browser clients may send an
-//! `Authorization: Bearer` header instead and need no Origin.
+//! A browser cannot set an `Authorization` header on a WebSocket, so it first asks
+//! `POST /api/v1/support/ticket` (an ordinary Bearer call) for a single-use ticket that
+//! works for 30 seconds, then opens the socket with `?ticket=`. No access token ever
+//! appears in a URL or a log. Because the handshake is a browser request, it also checks
+//! `Origin` against an allowlist (cross-site WebSocket hijacking). Non-browser clients
+//! may send `Authorization: Bearer` on the handshake instead and need no Origin.
+//! A socket ends when its sign-in does: logout, password reset or expiry.
 
 use std::{
     collections::HashMap,
@@ -21,6 +22,7 @@ use axum::{
     http::{HeaderMap, StatusCode, header::ORIGIN},
     response::{IntoResponse, Response},
 };
+use serde::Deserialize;
 use serde_json::json;
 use tokio::time::{interval_at, sleep, timeout};
 use uuid::Uuid;
@@ -31,7 +33,10 @@ use wog_config::support::dto::{
 use wog_infras::{
     DefaultConfig,
     models::User,
-    services::support::{ChatError, INBOX_PER_PAGE, SupportServices},
+    services::{
+        support::{ChatError, INBOX_PER_PAGE, SupportServices},
+        users::{CODE_KIND_WS, WS_TICKET_TTL_SECONDS},
+    },
     support::{Audience, ChatRole, ClientEvent, ConnId, ServerEvent, WindowLimiter},
 };
 use wog_middleware::{AdminClaims, AdminError, AppState, VerifiedUser, session_is_current};
@@ -110,10 +115,78 @@ fn reject(status: StatusCode, message: &str) -> Response {
     (status, Json(json!({ "error": true, "message": message }))).into_response()
 }
 
-/// `GET /api/v1/support/ws`: upgrade to the chat socket.
+#[derive(Deserialize)]
+pub struct WsQuery {
+    ticket: Option<String>,
+}
+
+/// `POST /api/v1/support/ticket`: a single-use ticket to open the chat socket with.
+pub async fn create_ws_ticket(
+    State(state): State<AppState>,
+    VerifiedUser { user, sid, .. }: VerifiedUser,
+) -> Result<Json<serde_json::Value>, RestApiError> {
+    let sid = sid.ok_or_else(|| {
+        RestApiError::Unauthorized("Session expired, please sign in again".into())
+    })?;
+    let ticket = state
+        .user_services
+        .issue_code(CODE_KIND_WS, user.id, Some(sid), WS_TICKET_TTL_SECONDS)
+        .await?;
+    Ok(Json(
+        json!({ "ticket": ticket, "expires_in": WS_TICKET_TTL_SECONDS }),
+    ))
+}
+
+/// Who a handshake is for, however it proved it.
+struct HandshakeAuth {
+    user: User,
+    token_exp: usize,
+    token_iat: usize,
+    sid: Option<Uuid>,
+}
+
+/// Spend a ticket and re-check everything a Bearer call would: the sign-in is still
+/// live, the account exists, its email is verified and no password change is pending.
+async fn redeem_ticket(state: &AppState, ticket: &str) -> Result<HandshakeAuth, Response> {
+    let unauthorized = || reject(StatusCode::UNAUTHORIZED, "Invalid or expired ticket");
+    let (user_id, sid) = state
+        .user_services
+        .redeem_code(CODE_KIND_WS, ticket)
+        .await
+        .map_err(|_| unauthorized())?
+        .ok_or_else(unauthorized)?;
+    let sid = sid.ok_or_else(unauthorized)?;
+    let session = state
+        .user_services
+        .live_session(sid)
+        .await
+        .map_err(|_| unauthorized())?
+        .ok_or_else(unauthorized)?;
+    let user = state
+        .user_services
+        .get_user(user_id)
+        .await
+        .map_err(|_| unauthorized())?;
+    if !user.email_verified {
+        return Err(reject(StatusCode::FORBIDDEN, "Verify your email first"));
+    }
+    if user.must_change_password {
+        return Err(reject(StatusCode::FORBIDDEN, "Change your password first"));
+    }
+    Ok(HandshakeAuth {
+        user,
+        token_exp: session.expires_at.timestamp().max(0) as usize,
+        token_iat: session.created_at.timestamp().max(0) as usize,
+        sid: Some(sid),
+    })
+}
+
+/// `GET /api/v1/support/ws`: upgrade to the chat socket. Browsers pass `?ticket=`;
+/// other clients may send a Bearer token instead.
 pub async fn support_ws(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<WsQuery>,
     auth: Result<VerifiedUser, AdminError>,
     ws: WebSocketUpgrade,
 ) -> Response {
@@ -122,17 +195,29 @@ pub async fn support_ws(
         tracing::warn!(origin = ?origin, "Chat WebSocket refused: origin not allowed");
         return reject(StatusCode::FORBIDDEN, "Origin not allowed");
     }
-    let VerifiedUser {
+    let HandshakeAuth {
         user,
         token_exp,
         token_iat,
-    } = match auth {
-        Ok(v) => v,
-        Err(e) => return e.into_response(),
+        sid,
+    } = match query.ticket.as_deref().filter(|t| !t.is_empty()) {
+        Some(ticket) => match redeem_ticket(&state, ticket).await {
+            Ok(v) => v,
+            Err(response) => return response,
+        },
+        None => match auth {
+            Ok(v) => HandshakeAuth {
+                user: v.user,
+                token_exp: v.token_exp,
+                token_iat: v.token_iat,
+                sid: v.sid,
+            },
+            Err(e) => return e.into_response(),
+        },
     };
     ws.max_message_size(MAX_FRAME_BYTES)
         .max_frame_size(MAX_FRAME_BYTES)
-        .on_upgrade(move |socket| run_connection(state, user, token_exp, token_iat, socket))
+        .on_upgrade(move |socket| run_connection(state, user, token_exp, token_iat, sid, socket))
 }
 
 struct Connection {
@@ -144,8 +229,10 @@ struct Connection {
     send_limit: WindowLimiter,
     frame_limit: WindowLimiter,
     strikes: u32,
-    /// When this connection's access token was issued (seconds).
+    /// When this connection's sign-in started (seconds).
     token_iat: usize,
+    /// The sign-in this socket belongs to; the socket ends when it does.
+    sid: Option<Uuid>,
     /// A user's own conversation id, once known.
     own_conversation: Option<Uuid>,
     /// conversation id → owner, so typing/read events skip the database.
@@ -184,6 +271,7 @@ async fn run_connection(
     user: User,
     token_exp: usize,
     token_iat: usize,
+    sid: Option<Uuid>,
     mut socket: WebSocket,
 ) {
     let svc = state.support_services.clone();
@@ -240,6 +328,7 @@ async fn run_connection(
         frame_limit: WindowLimiter::new(FRAME_LIMIT.0, FRAME_LIMIT.1),
         strikes: 0,
         token_iat,
+        sid,
         own_conversation,
         owners: HashMap::new(),
     };
@@ -339,9 +428,18 @@ impl Connection {
     }
 
     /// The account is read from the database, never trusted from the token or
-    /// from when the socket opened: a demoted admin, a deleted account or a
+    /// from when the socket opened: a demoted admin, a deleted account, a logout or a
     /// password reset (which voids earlier sessions) cuts the connection off.
     async fn session_still_valid(&self) -> bool {
+        // Logging out (or a password reset) revokes the sign-in; the socket goes with it.
+        if let Some(sid) = self.sid
+            && !matches!(
+                self.state.user_services.live_session(sid).await,
+                Ok(Some(_))
+            )
+        {
+            return false;
+        }
         self.state
             .user_services
             .get_user(self.user.id)

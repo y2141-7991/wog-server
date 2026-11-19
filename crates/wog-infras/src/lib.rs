@@ -31,6 +31,13 @@ pub struct Claims {
     pub token_type: TokenType,
     pub exp: usize,
     pub iat: usize,
+    /// The sign-in (a `refresh_sessions` row) this token belongs to. Every token issued
+    /// by this server has one; it is optional only so older tokens still decode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sid: Option<Uuid>,
+    /// Refresh tokens only: this token's id. Only the session's current one may be used.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub jti: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -111,6 +118,10 @@ pub struct DefaultConfig {
     /// `REST_API_URL` are always allowed.
     #[envconfig(from = "ALLOWED_ORIGINS", default = "")]
     pub allowed_origins: String,
+    /// Adds `Secure` to the refresh cookie. Leave on in production; turn off only for
+    /// plain-http local development in a browser (Safari) that refuses Secure cookies there.
+    #[envconfig(from = "COOKIE_SECURE", default = "true")]
+    pub cookie_secure: bool,
 }
 
 #[derive(Clone)]
@@ -126,44 +137,32 @@ impl AppConfig {
             default_config,
         })
     }
-    pub fn generate_token_pair(&self, user: &User) -> Result<TokenPair> {
-        let access_token = self.build_token(user.id, &user.username, TokenType::Access)?;
-        let refresh_token = self.build_token(user.id, &user.username, TokenType::Refresh)?;
+    /// A matching access/refresh pair for one session. `jti` identifies this refresh
+    /// token; the caller stores it in `refresh_sessions` so only the latest one works.
+    pub fn issue_tokens(&self, user: &User, sid: Uuid, jti: Uuid) -> Result<TokenPair> {
         Ok(TokenPair {
-            access_token,
-            refresh_token,
+            access_token: self.issue_access_token(user, sid)?,
+            refresh_token: self.build_token(user, TokenType::Refresh, Some(sid), Some(jti))?,
             lang: "en".to_string(),
             timestamp: Utc::now().timestamp(),
         })
     }
 
-    pub fn refresh_access_token(&self, refresh_claims: &Claims) -> Result<TokenPair> {
-        if refresh_claims.token_type != TokenType::Refresh {
-            anyhow::bail!("Invalid token type: expected refresh token");
-        }
-        let access_token = self.build_token(
-            refresh_claims.sub,
-            &refresh_claims.username,
-            TokenType::Access,
-        )?;
-        let refresh_token = self.build_token(
-            refresh_claims.sub,
-            &refresh_claims.username,
-            TokenType::Refresh,
-        )?;
-        Ok(TokenPair {
-            access_token,
-            refresh_token,
-            lang: "en".to_string(),
-            timestamp: Utc::now().timestamp(),
-        })
+    pub fn issue_access_token(&self, user: &User, sid: Uuid) -> Result<String> {
+        Ok(self.build_token(user, TokenType::Access, Some(sid), None)?)
+    }
+
+    /// When a refresh token issued now stops working.
+    pub fn refresh_expires_at(&self) -> chrono::DateTime<Utc> {
+        Utc::now() + chrono::Duration::minutes(self.default_config.refresh_token_expire_minutes)
     }
 
     fn build_token(
         &self,
-        sub: Uuid,
-        username: &str,
+        user: &User,
         token_type: TokenType,
+        sid: Option<Uuid>,
+        jti: Option<Uuid>,
     ) -> Result<String, DatabaseError> {
         let now = Utc::now();
         let (expire_minutes, algorithm, secret) = match token_type {
@@ -181,11 +180,13 @@ impl AppConfig {
         let exp = now + chrono::Duration::minutes(expire_minutes);
 
         let claims = Claims {
-            sub,
-            username: username.to_string(),
+            sub: user.id,
+            username: user.username.clone(),
             token_type,
             exp: exp.timestamp() as usize,
             iat: now.timestamp() as usize,
+            sid,
+            jti,
         };
 
         let header = Header::new(algorithm);

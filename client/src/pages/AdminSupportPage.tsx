@@ -10,14 +10,13 @@ import { ChatComposer } from '../components/chat/ChatComposer'
 import { ChatThread } from '../components/chat/ChatThread'
 import { lastStoredId } from '../components/chat/chatFormat'
 import { useChatThread } from '../hooks/useChatThread'
-import type { AdminSupport } from '../hooks/useAdminSupport'
+import { subscribeAdminChat, useAdminChatStore } from '../stores/adminChat'
 import { timeAgo } from '../lib/format'
 import type { SupportConversation, SupportServerEvent } from '../types'
 
 type Filter = 'open' | 'closed' | 'all'
 
 interface Props {
-  support: AdminSupport
   currentUserId: string
   onOpenUser: (userId: string) => void
 }
@@ -39,7 +38,7 @@ function matches(row: SupportConversation, filter: Filter, query: string): boole
 const byRecent = (a: SupportConversation, b: SupportConversation) =>
   new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
 
-export function AdminSupportPage({ support, currentUserId, onOpenUser }: Props) {
+export function AdminSupportPage({ currentUserId, onOpenUser }: Props) {
   const [filter, setFilter] = useState<Filter>('open')
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
@@ -52,7 +51,8 @@ export function AdminSupportPage({ support, currentUserId, onOpenUser }: Props) 
   const [paneError, setPaneError] = useState<string | null>(null)
   const [paneLoading, setPaneLoading] = useState(false)
 
-  const { send, status } = support
+  const send = useAdminChatStore((s) => s.send)
+  const status = useAdminChatStore((s) => s.status)
   const thread = useChatThread({ role: 'admin', selfId: currentUserId, conversationId: selectedId ?? undefined, send })
   const { reset, mergeIncoming, clear, flush, handleEvent } = thread
 
@@ -173,8 +173,8 @@ export function AdminSupportPage({ support, currentUserId, onOpenUser }: Props) 
     }
   })
   useEffect(
-    () => support.subscribe((e) => live.current.onEvent(e), () => live.current.onReady()),
-    [support],
+    () => subscribeAdminChat((e) => live.current.onEvent(e), () => live.current.onReady()),
+    [],
   )
 
   async function toggleStatus() {

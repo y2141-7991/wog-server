@@ -339,3 +339,28 @@ pub struct PostedMessage {
     /// The `client_msg_id` was already stored: nothing new was written.
     pub duplicate: bool,
 }
+
+/// What presenting a refresh token to its session came to. See `rotate_session`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefreshOutcome {
+    /// It was the session's current token: it is spent and the next one is now current.
+    Rotated(Uuid),
+    /// It was the token just before the current one, used within the grace window: a
+    /// second tab racing the rotation. The caller gets a new access token but the
+    /// refresh token stays as it is.
+    Replayed(Uuid),
+    /// An older token came back after the grace window: someone holds a copy. The whole
+    /// session has been revoked.
+    Reused,
+    /// Unknown, revoked or expired session.
+    Invalid,
+}
+
+/// A live sign-in: not revoked, not expired.
+#[derive(Debug, Clone, FromRow)]
+pub struct SessionInfo {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+}

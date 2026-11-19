@@ -8,12 +8,13 @@ import type {
   PlanSlug,
   Subscription,
 } from '../types'
+import { apiFetch } from './http'
 
 const API = import.meta.env.VITE_API_URL || ''
 const BASE = `${API}/api/v1/billing`
 
 async function request<T>(path: string, init: RequestInit, failure: string, base = BASE): Promise<T> {
-  const res = await fetch(`${base}${path}`, { credentials: 'include', ...init })
+  const res = await apiFetch(`${base}${path}`, init)
   const body = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(body.message || failure)
   return body as T

@@ -14,4 +14,5 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 tracing = "0.1.44"
 dashmap = "6"
+uuid = { version = "1.21.0", features = ["v4", "serde"] }
 tokio = { version = "1", features = ["time"] }

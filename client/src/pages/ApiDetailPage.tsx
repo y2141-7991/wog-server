@@ -1,7 +1,5 @@
-import { useEffect, useState } from 'react'
-import { readCatalog } from '../api/catalogCache'
-import { fetchSubscription } from '../api/billing'
-import { fetchApi } from '../api/marketplace'
+import { useState } from 'react'
+import { useApi, useSubscription } from '../api/queries'
 import { ApiAvatar } from '../components/ApiCard'
 import { TryIt } from '../components/TryIt'
 import { timeAgo } from '../lib/format'
@@ -41,31 +39,13 @@ function pythonFor(api: MarketplaceApi) {
 type Lang = 'curl' | 'python'
 
 export function ApiDetailPage({ slug, onBack, onDashboard }: { slug: string; onBack: () => void; onDashboard: () => void }) {
-  const [api, setApi] = useState<MarketplaceApi | null>(() => readCatalog()?.find((a) => a.slug === slug) ?? null)
-  const [error, setError] = useState<string | null>(null)
+  // Opens at once from the catalog copy already in the cache, then refreshes.
+  const { data: api = null, error: loadError } = useApi(slug)
   const [lang, setLang] = useState<Lang>('curl')
   // `undefined` until loaded; `null` if it could not be loaded (the free-tier text is the safe fallback).
-  const [subscription, setSubscription] = useState<Subscription | null | undefined>(undefined)
-
-  useEffect(() => {
-    let cancelled = false
-    fetchSubscription()
-      .then((s) => !cancelled && setSubscription(s))
-      .catch(() => !cancelled && setSubscription(null))
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    fetchApi(slug)
-      .then((a) => !cancelled && setApi(a))
-      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Could not load this API'))
-    return () => {
-      cancelled = true
-    }
-  }, [slug])
+  const subscriptionQuery = useSubscription()
+  const subscription: Subscription | null | undefined = subscriptionQuery.data ?? (subscriptionQuery.isError ? null : undefined)
+  const error = !api && loadError ? loadError.message || 'Could not load this API' : null
 
   if (error) {
     return (

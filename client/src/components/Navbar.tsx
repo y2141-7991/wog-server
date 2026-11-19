@@ -1,35 +1,32 @@
 import { NEAR_LIMIT, usePlanStatus } from '../hooks/usePlanStatus'
-import type { User } from '../types'
+import { useAdminChatStore } from '../stores/adminChat'
+import { useAuthStore } from '../stores/auth'
+import { useNavigationStore } from '../stores/navigation'
 import { BrandLogo } from './BrandLogo'
 
-interface NavbarProps {
-  user: User
-  onHome: () => void
-  onDashboard: () => void
-  /** Only given to admins. */
-  onAdmin?: () => void
-  /** Only given to admins: opens the support inbox. */
-  onSupport?: () => void
-  /** Unread customer messages, shown as a badge on the Support link. */
-  supportUnread?: number
-  onProfile: () => void
-  /** Changes when the plan badge should reload (e.g. the current page). */
-  planRefreshKey?: string
-}
-
-export function Navbar({ user, onHome, onDashboard, onAdmin, onSupport, supportUnread = 0, onProfile, planRefreshKey = '' }: NavbarProps) {
-  const plan = usePlanStatus(planRefreshKey)
+/**
+ * Reads everything it shows from the stores: who is signed in, the plan badge (shared
+ * queries), the admin's unread count and where the links go. It takes no props.
+ */
+export function Navbar() {
+  const user = useAuthStore((s) => s.user)
+  const navigate = useNavigationStore((s) => s.navigate)
+  const goHome = useNavigationStore((s) => s.goHome)
+  const supportUnread = useAdminChatStore((s) => s.totalUnread)
+  const plan = usePlanStatus()
+  if (!user) return null
+  const isAdmin = user.role === 'admin'
   return (
     <nav className="navbar">
-      <button className="navbar-title" onClick={onHome} aria-label="WoG API Hub, home">
+      <button className="navbar-title" onClick={goHome} aria-label="WoG API Hub, home">
         <BrandLogo size={30} />
         <b>WoG</b> <span>API Hub</span>
       </button>
       <div className="navbar-right">
-        <button className="nav-link" onClick={onDashboard}>Dashboard</button>
-        {onAdmin && <button className="nav-link" onClick={onAdmin}>Admin</button>}
-        {onSupport && (
-          <button className="nav-link" onClick={onSupport} aria-label={supportUnread > 0 ? `Support inbox, ${supportUnread} unread` : 'Support inbox'}>
+        <button className="nav-link" onClick={() => navigate({ name: 'dashboard' })}>Dashboard</button>
+        {isAdmin && <button className="nav-link" onClick={() => navigate({ name: 'admin' })}>Admin</button>}
+        {isAdmin && (
+          <button className="nav-link" onClick={() => navigate({ name: 'admin-support' })} aria-label={supportUnread > 0 ? `Support inbox, ${supportUnread} unread` : 'Support inbox'}>
             Support
             {supportUnread > 0 && <span className="chat-badge chat-badge-inline">{supportUnread > 99 ? '99+' : supportUnread}</span>}
           </button>
@@ -37,14 +34,14 @@ export function Navbar({ user, onHome, onDashboard, onAdmin, onSupport, supportU
         {plan.planName && (
           <button
             className={`plan-pill${plan.paid ? ' plan-pill-paid' : ''}${plan.ratio >= NEAR_LIMIT ? ' plan-pill-hot' : ''}`}
-            onClick={onProfile}
+            onClick={() => navigate({ name: 'profile' })}
             title={plan.ratio >= NEAR_LIMIT ? `You have used ${Math.round(plan.ratio * 100)}% of your quota` : 'Manage your plan'}
           >
             {plan.planName}
             {plan.ratio >= NEAR_LIMIT && <span> · Upgrade</span>}
           </button>
         )}
-        <button className="avatar-btn" onClick={onProfile} title={user.username}>
+        <button className="avatar-btn" onClick={() => navigate({ name: 'profile' })} title={user.username}>
           {user.avatar_url ? (
             <img src={user.avatar_url} alt={user.username} />
           ) : (

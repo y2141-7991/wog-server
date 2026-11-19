@@ -60,20 +60,47 @@ export function useSupportSocket({ enabled, onEvent, onReady, onAuthLost }: Opti
       if (stopped) return
       clearTimeout(retryTimer)
       setStatus(navigator.onLine ? 'reconnecting' : 'offline')
-      retryTimer = setTimeout(connect, backoffDelay(attempt++))
+      retryTimer = setTimeout(() => void connect(), backoffDelay(attempt++))
     }
 
-    function connect() {
-      if (stopped) return
+    // Asking for a ticket takes a round trip; keep a second trigger (online, tab
+    // visible) from opening a second socket in the meantime.
+    let connecting = false
+
+    const checkSession = () => {
+      // A refused handshake looks the same as a dead server from here, so ask the REST
+      // API whether the session itself is still good.
+      void fetchCurrentUser().then((user) => {
+        if (!stopped && !user) {
+          stopped = true
+          clearTimers()
+          setStatus('offline')
+          handlers.current.onAuthLost?.()
+        }
+      }).catch(() => {})
+    }
+
+    async function connect() {
+      if (stopped || connecting) return
+      connecting = true
       clearTimeout(retryTimer)
       setStatus(everReady ? 'reconnecting' : 'connecting')
       let gotReady = false
       let socket: WebSocket
       try {
-        socket = new WebSocket(supportSocketUrl())
+        // A browser cannot send an Authorization header on a WebSocket: a Bearer call
+        // buys a single-use ticket and the socket URL carries that instead.
+        const url = await supportSocketUrl()
+        if (stopped) return
+        socket = new WebSocket(url)
       } catch {
+        if (stopped) return
+        failedOpens += 1
+        if (failedOpens >= 2) checkSession()
         scheduleReconnect()
         return
+      } finally {
+        connecting = false
       }
       socketRef.current = socket
 
@@ -116,18 +143,7 @@ export function useSupportSocket({ enabled, onEvent, onReady, onAuthLost }: Opti
         if (stopped) return
         if (!gotReady) {
           failedOpens += 1
-          // A refused handshake looks the same as a dead server from here, so
-          // ask the REST API whether the session itself is still good.
-          if (failedOpens >= 2) {
-            void fetchCurrentUser().then((user) => {
-              if (!stopped && !user) {
-                stopped = true
-                clearTimers()
-                setStatus('offline')
-                handlers.current.onAuthLost?.()
-              }
-            }).catch(() => {})
-          }
+          if (failedOpens >= 2) checkSession()
         }
         scheduleReconnect()
       }
@@ -142,7 +158,7 @@ export function useSupportSocket({ enabled, onEvent, onReady, onAuthLost }: Opti
       const s = socketRef.current
       if (s && (s.readyState === WebSocket.OPEN || s.readyState === WebSocket.CONNECTING)) return
       attempt = 0
-      connect()
+      void connect()
     }
     const onVisible = () => {
       if (document.visibilityState === 'visible') reconnectNow()
@@ -150,7 +166,7 @@ export function useSupportSocket({ enabled, onEvent, onReady, onAuthLost }: Opti
     window.addEventListener('online', reconnectNow)
     document.addEventListener('visibilitychange', onVisible)
 
-    connect()
+    void connect()
 
     return () => {
       stopped = true

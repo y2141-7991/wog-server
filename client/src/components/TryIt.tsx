@@ -1,8 +1,11 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { callGateway, getSavedKey, saveKey } from '../api/marketplace'
+import { qk } from '../api/queries'
 import type { MarketplaceApi } from '../types'
 
 export function TryIt({ api }: { api: MarketplaceApi }) {
+  const queryClient = useQueryClient()
   const [apiKey, setApiKey] = useState(getSavedKey)
   // Only required params start filled in; an optional one such as `cursor` must stay
   // empty or the first call would not return the first page.
@@ -31,6 +34,9 @@ export function TryIt({ api }: { api: MarketplaceApi }) {
       setNextSearchId(null)
     } finally {
       setRunning(false)
+      // The call counted against the quota: refresh the badge and the dashboard.
+      void queryClient.invalidateQueries({ queryKey: qk.usageAll })
+      void queryClient.invalidateQueries({ queryKey: qk.subscription })
     }
   }
 

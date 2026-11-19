@@ -1,39 +1,21 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { readCatalog, writeCatalog } from '../api/catalogCache'
-import { fetchApis } from '../api/marketplace'
+import { useMemo, useState } from 'react'
+import { useCatalog } from '../api/queries'
 import { ApiCard } from '../components/ApiCard'
+import { useNavigationStore } from '../stores/navigation'
 import type { MarketplaceApi } from '../types'
 
 type Sort = 'relevance' | 'calls' | 'latency' | 'updated'
 
-interface HubPageProps {
-  query: string
-  onQuery: (q: string) => void
-  onOpen: (slug: string) => void
-}
-
-export function HubPage({ query, onQuery, onOpen }: HubPageProps) {
-  const [apis, setApis] = useState<MarketplaceApi[] | null>(readCatalog)
-  const [error, setError] = useState<string | null>(null)
+export function HubPage() {
+  const query = useNavigationStore((s) => s.query)
+  const setQuery = useNavigationStore((s) => s.setQuery)
+  const navigate = useNavigationStore((s) => s.navigate)
+  const { data, error: loadError } = useCatalog()
+  const apis = data ?? null
   // With a cached copy on screen, a failed background refresh is not worth an error.
-  const hadCache = useRef(apis !== null)
+  const error = !data && loadError ? loadError.message || 'Could not load the catalog' : null
   const [category, setCategory] = useState('All')
   const [sort, setSort] = useState<Sort>('relevance')
-
-  useEffect(() => {
-    let cancelled = false
-    fetchApis()
-      .then((a) => {
-        writeCatalog(a)
-        if (!cancelled) setApis(a)
-      })
-      .catch((e) => {
-        if (!cancelled && !hadCache.current) setError(e instanceof Error ? e.message : 'Could not load the catalog')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   const categories = useMemo(() => ['All', ...new Set((apis ?? []).map((a) => a.category))], [apis])
 
@@ -76,8 +58,8 @@ export function HubPage({ query, onQuery, onOpen }: HubPageProps) {
             <circle cx="11" cy="11" r="7" />
             <path d="M21 21l-4.3-4.3" />
           </svg>
-          <input value={query} onChange={(e) => onQuery(e.target.value)} placeholder="Search APIs" spellCheck={false} />
-          {query && <button className="link-btn" onClick={() => onQuery('')}>Clear</button>}
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search APIs" spellCheck={false} />
+          {query && <button className="link-btn" onClick={() => setQuery('')}>Clear</button>}
         </div>
 
         {categories.length > 2 && (
@@ -96,7 +78,7 @@ export function HubPage({ query, onQuery, onOpen }: HubPageProps) {
 
         <div className="api-grid">
           {results.map((api) => (
-            <ApiCard key={api.id} api={api} onOpen={() => onOpen(api.slug)} />
+            <ApiCard key={api.id} api={api} onOpen={() => navigate({ name: 'api', slug: api.slug })} />
           ))}
         </div>
       </section>

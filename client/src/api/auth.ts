@@ -1,10 +1,9 @@
 import type { User } from '../types'
-
-const API = import.meta.env.VITE_API_URL || ''
+import { API, apiFetch, endSession, refreshAccessToken, setAccessToken } from './http'
 
 const GOOGLE_LOGIN_URL = `${API}/api/v1/auth/oauth/google`
 const AUTH_ME_URL = `${API}/api/v1/auth/me`
-const LOGOUT_URL = `${API}/api/v1/auth/logout`
+const EXCHANGE_URL = `${API}/api/v1/auth/oauth/exchange`
 const LOGIN_URL = `${API}/api/v1/auth/login`
 const REGISTER_URL = `${API}/api/v1/auth/register`
 const VERIFY_EMAIL_URL = `${API}/api/v1/auth/verify-email`
@@ -17,14 +16,28 @@ interface AuthResponse {
   refresh_token: string
 }
 
+/** The signed-in user, or `null`. A 401 here has already tried a refresh (see `apiFetch`). */
 export async function fetchCurrentUser(): Promise<User | null> {
-  const res = await fetch(AUTH_ME_URL, { credentials: 'include' })
+  const res = await apiFetch(AUTH_ME_URL)
   if (!res.ok) return null
   return res.json()
 }
 
-export async function logout(): Promise<void> {
-  await fetch(LOGOUT_URL, { method: 'POST', credentials: 'include' })
+/**
+ * Pick the session back up after a reload: the refresh cookie (if there is one) buys an
+ * access token, and the token identifies the user. `null` when signed out.
+ */
+export async function restoreSession(): Promise<User | null> {
+  if (!(await refreshAccessToken())) return null
+  return fetchCurrentUser()
+}
+
+export const logout = endSession
+
+/** Keep the access token from a sign-in response in memory and hand back the user. */
+function startFrom(body: AuthResponse): User {
+  setAccessToken(body.access_token)
+  return body.user
 }
 
 export function getGoogleLoginUrl(): string {
@@ -42,7 +55,7 @@ export async function loginWithPassword(email: string, password: string): Promis
   if (!res.ok) {
     throw new Error(body.message || 'Invalid email or password')
   }
-  return (body as AuthResponse).user
+  return startFrom(body as AuthResponse)
 }
 
 export async function registerWithPassword(username: string, email: string, password: string): Promise<User> {
@@ -56,7 +69,22 @@ export async function registerWithPassword(username: string, email: string, pass
   if (!res.ok) {
     throw new Error(body.message || 'Could not create account')
   }
-  return (body as AuthResponse).user
+  return startFrom(body as AuthResponse)
+}
+
+/** Swap the one-time code from the Google sign-in redirect for a session. */
+export async function exchangeOAuthCode(code: string): Promise<User> {
+  const res = await fetch(EXCHANGE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+    credentials: 'include',
+  })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(body.message || 'Google sign-in failed. Please try again.')
+  }
+  return startFrom(body as AuthResponse)
 }
 
 export async function verifyEmail(token: string): Promise<User> {
@@ -64,7 +92,6 @@ export async function verifyEmail(token: string): Promise<User> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),
-    credentials: 'include',
   })
   const body = await res.json().catch(() => ({}))
   if (!res.ok) {
@@ -74,10 +101,7 @@ export async function verifyEmail(token: string): Promise<User> {
 }
 
 export async function resendVerification(): Promise<void> {
-  const res = await fetch(RESEND_VERIFICATION_URL, {
-    method: 'POST',
-    credentials: 'include',
-  })
+  const res = await apiFetch(RESEND_VERIFICATION_URL, { method: 'POST' })
   const body = await res.json().catch(() => ({}))
   if (!res.ok) {
     throw new Error(body.message || 'Could not send verification email')
@@ -85,11 +109,10 @@ export async function resendVerification(): Promise<void> {
 }
 
 export async function changePassword(currentPassword: string, newPassword: string): Promise<User> {
-  const res = await fetch(CHANGE_PASSWORD_URL, {
+  const res = await apiFetch(CHANGE_PASSWORD_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
-    credentials: 'include',
   })
   const body = await res.json().catch(() => ({}))
   if (!res.ok) {
@@ -115,18 +138,17 @@ export async function forgotPassword(email: string): Promise<string> {
   return (body as { message: string }).message
 }
 
-/** Set a new password with the token from the emailed link. Clears any stale session cookies. */
+/** Set a new password with the token from the emailed link. Drops any stale session in this browser. */
 export async function resetPassword(token: string, newPassword: string): Promise<void> {
   const res = await fetch(RESET_PASSWORD_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token, new_password: newPassword }),
-    credentials: 'include',
   })
   const body = await res.json().catch(() => ({}))
   if (!res.ok) {
     throw new Error(body.message || 'Could not reset the password')
   }
-  // Every older session is void now; drop this browser's cookies too.
-  await logout().catch(() => undefined)
+  // Every older session is void now; drop this browser's refresh cookie and token too.
+  await endSession().catch(() => undefined)
 }

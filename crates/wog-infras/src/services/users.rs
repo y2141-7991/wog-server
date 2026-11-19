@@ -3,8 +3,9 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
+    AppConfig, Claims, TokenPair,
     errors::DatabaseError,
-    models::User,
+    models::{RefreshOutcome, SessionInfo, User},
     password::{hash_password, verify_password},
     repos::{DynUserRepository, UserRepository},
 };
@@ -28,6 +29,29 @@ fn new_reset_token() -> String {
     format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
 }
 
+/// A second tab that refreshes with the token the first tab has just spent is a race,
+/// not theft, for this many seconds.
+pub const REFRESH_GRACE_SECONDS: i64 = 10;
+/// The Google sign-in redirect carries a code that is good for this long...
+pub const OAUTH_CODE_TTL_SECONDS: i64 = 60;
+/// ...and a chat-socket ticket for this long. Both work once.
+pub const WS_TICKET_TTL_SECONDS: i64 = 30;
+pub const CODE_KIND_OAUTH: &str = "oauth";
+pub const CODE_KIND_WS: &str = "ws";
+
+/// What a successful refresh hands back.
+pub enum Refreshed {
+    /// The usual case: new access token and a new refresh token (set as the cookie).
+    Rotated(TokenPair),
+    /// A racing second tab: a new access token only; the cookie it needs is the one the
+    /// first tab already received.
+    Replayed { access_token: String },
+}
+
+fn session_ended() -> DatabaseError {
+    DatabaseError::Unauthorized("Session expired, please sign in again".into())
+}
+
 #[derive(Clone)]
 pub struct UserServices {
     user_repo: DynUserRepository,
@@ -40,6 +64,108 @@ impl UserServices {
 }
 
 impl UserServices {
+    /// Start a sign-in: record the session and issue its first access/refresh pair.
+    pub async fn start_session(
+        &self,
+        cfg: &AppConfig,
+        user: &User,
+    ) -> Result<TokenPair, DatabaseError> {
+        let (sid, jti) = (Uuid::new_v4(), Uuid::new_v4());
+        let pair = cfg
+            .issue_tokens(user, sid, jti)
+            .map_err(|e| DatabaseError::Others(e.to_string()))?;
+        self.user_repo
+            .create_session(sid, user.id, jti, cfg.refresh_expires_at())
+            .await?;
+        Ok(pair)
+    }
+
+    /// Exchange a (signature-checked) refresh token for new tokens. The token must be
+    /// its session's current one; see `UserRepository::rotate_session` for the rest.
+    pub async fn refresh_session(
+        &self,
+        cfg: &AppConfig,
+        claims: &Claims,
+    ) -> Result<Refreshed, DatabaseError> {
+        let (Some(sid), Some(jti)) = (claims.sid, claims.jti) else {
+            // Issued before sessions existed: sign in again.
+            return Err(session_ended());
+        };
+        let new_jti = Uuid::new_v4();
+        let outcome = self
+            .user_repo
+            .rotate_session(
+                sid,
+                jti,
+                new_jti,
+                cfg.refresh_expires_at(),
+                REFRESH_GRACE_SECONDS,
+            )
+            .await?;
+        let user_id = match outcome {
+            RefreshOutcome::Rotated(id) | RefreshOutcome::Replayed(id) if id == claims.sub => id,
+            RefreshOutcome::Reused => {
+                tracing::warn!(session_id = %sid, user_id = %claims.sub, "Refresh token replayed; session revoked");
+                return Err(session_ended());
+            }
+            _ => return Err(session_ended()),
+        };
+        let user = self.get_user(user_id).await.map_err(|_| session_ended())?;
+        match outcome {
+            RefreshOutcome::Rotated(_) => Ok(Refreshed::Rotated(
+                cfg.issue_tokens(&user, sid, new_jti)
+                    .map_err(|e| DatabaseError::Others(e.to_string()))?,
+            )),
+            _ => Ok(Refreshed::Replayed {
+                access_token: cfg
+                    .issue_access_token(&user, sid)
+                    .map_err(|e| DatabaseError::Others(e.to_string()))?,
+            }),
+        }
+    }
+
+    /// Logout: end one sign-in.
+    pub async fn end_session(&self, sid: Uuid) -> Result<(), DatabaseError> {
+        self.user_repo.revoke_session(sid).await
+    }
+
+    /// The session, if it is still live (not logged out, reset or expired).
+    pub async fn live_session(&self, sid: Uuid) -> Result<Option<SessionInfo>, DatabaseError> {
+        self.user_repo.find_live_session(sid).await
+    }
+
+    /// Mint a single-use code of `kind` and return it; only its hash is stored.
+    pub async fn issue_code(
+        &self,
+        kind: &str,
+        user_id: Uuid,
+        session_id: Option<Uuid>,
+        ttl_seconds: i64,
+    ) -> Result<String, DatabaseError> {
+        let code = new_reset_token();
+        self.user_repo
+            .create_auth_code(
+                &hash_reset_token(&code),
+                kind,
+                user_id,
+                session_id,
+                Utc::now() + Duration::seconds(ttl_seconds),
+            )
+            .await?;
+        Ok(code)
+    }
+
+    /// Spend a code: the user (and session, if it was bound to one) it was issued for.
+    pub async fn redeem_code(
+        &self,
+        kind: &str,
+        code: &str,
+    ) -> Result<Option<(Uuid, Option<Uuid>)>, DatabaseError> {
+        self.user_repo
+            .redeem_auth_code(&hash_reset_token(code), kind)
+            .await
+    }
+
     pub async fn get_user(&self, id: Uuid) -> Result<User, DatabaseError> {
         self.user_repo
             .find_by_id(id)

@@ -1,6 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
 import './App.css'
-import { useAuth } from './hooks/useAuth'
 import { Navbar } from './components/Navbar'
 import { LoginPage } from './pages/LoginPage'
 import { HubPage } from './pages/HubPage'
@@ -16,69 +14,20 @@ import { PendingVerificationPage } from './pages/PendingVerificationPage'
 import { AdminSupportPage } from './pages/AdminSupportPage'
 import { SupportChatWidget } from './components/SupportChatWidget'
 import { useAdminSupport } from './hooks/useAdminSupport'
-
-type Page =
-  | { name: 'home' }
-  | { name: 'api'; slug: string }
-  | { name: 'dashboard' }
-  | { name: 'admin'; userId?: string }
-  | { name: 'admin-support' }
-  | { name: 'profile' }
-  | { name: 'change-password' }
-  | { name: 'verify-email' }
-  | { name: 'forgot-password' }
-  | { name: 'reset-password' }
-
-function pathToPage(): Page {
-  const path = window.location.pathname
-  if (path === '/me') return { name: 'profile' }
-  if (path === '/change-password') return { name: 'change-password' }
-  if (path === '/dashboard') return { name: 'dashboard' }
-  if (path === '/admin/support') return { name: 'admin-support' }
-  if (path === '/admin') return { name: 'admin', userId: new URLSearchParams(window.location.search).get('user') ?? undefined }
-  if (path === '/verify-email') return { name: 'verify-email' }
-  if (path === '/forgot-password') return { name: 'forgot-password' }
-  if (path === '/reset-password') return { name: 'reset-password' }
-  if (path.startsWith('/apis/')) return { name: 'api', slug: decodeURIComponent(path.slice('/apis/'.length)) }
-  return { name: 'home' }
-}
-
-function pageToPath(p: Page): string {
-  switch (p.name) {
-    case 'profile': return '/me'
-    case 'change-password': return '/change-password'
-    case 'dashboard': return '/dashboard'
-    case 'admin': return p.userId ? `/admin?user=${encodeURIComponent(p.userId)}` : '/admin'
-    case 'admin-support': return '/admin/support'
-    case 'forgot-password': return '/forgot-password'
-    case 'reset-password': return '/reset-password'
-    case 'api': return `/apis/${encodeURIComponent(p.slug)}`
-    default: return '/'
-  }
-}
+import { useAuthStore } from './stores/auth'
+import { useNavigationStore } from './stores/navigation'
 
 function App() {
-  const { user, loading, error, login, loginWithPassword, register, verifyEmail, resendVerification, changePassword, logout } = useAuth()
-  const [page, setPage] = useState<Page>(pathToPage)
-  const [query, setQuery] = useState('')
-
-  useEffect(() => {
-    const onPop = () => setPage(pathToPage())
-    window.addEventListener('popstate', onPop)
-    return () => window.removeEventListener('popstate', onPop)
-  }, [])
+  const user = useAuthStore((s) => s.user)
+  const loading = useAuthStore((s) => s.loading)
+  const error = useAuthStore((s) => s.error)
+  const { login, loginWithPassword, register, verifyEmail, resendVerification, changePassword, logout } = useAuthStore.getState()
+  const page = useNavigationStore((s) => s.page)
+  const navigate = useNavigationStore((s) => s.navigate)
+  const goHome = useNavigationStore((s) => s.goHome)
 
   // Admins keep one chat socket for the whole session (the nav badge is live everywhere).
-  const adminChat = useAdminSupport(
-    !!user && user.role === 'admin' && user.email_verified && !user.must_change_password,
-  )
-
-  const navigate = useCallback((p: Page) => {
-    window.history.pushState(null, '', pageToPath(p))
-    setPage(p)
-  }, [])
-
-  const goHome = () => navigate({ name: 'home' })
+  useAdminSupport(!!user && user.role === 'admin' && user.email_verified && !user.must_change_password)
 
   if (page.name === 'verify-email') {
     return <VerifyEmailPage onVerify={verifyEmail} onContinue={goHome} />
@@ -119,20 +68,9 @@ function App() {
 
   return (
     <>
-      <Navbar
-        user={user}
-        onHome={goHome}
-        onDashboard={() => navigate({ name: 'dashboard' })}
-        onAdmin={user.role === 'admin' ? () => navigate({ name: 'admin' }) : undefined}
-        onSupport={user.role === 'admin' ? () => navigate({ name: 'admin-support' }) : undefined}
-        supportUnread={adminChat.totalUnread}
-        onProfile={() => navigate({ name: 'profile' })}
-        planRefreshKey={page.name}
-      />
+      <Navbar />
       <main>
-        {page.name === 'home' && (
-          <HubPage query={query} onQuery={setQuery} onOpen={(slug) => navigate({ name: 'api', slug })} />
-        )}
+        {page.name === 'home' && <HubPage />}
         {page.name === 'api' && (
           <ApiDetailPage slug={page.slug} onBack={goHome} onDashboard={() => navigate({ name: 'dashboard' })} />
         )}
@@ -140,7 +78,6 @@ function App() {
         {page.name === 'admin' && user.role === 'admin' && <AdminPage currentUserId={user.id} initialUserId={page.userId} />}
         {page.name === 'admin-support' && user.role === 'admin' && (
           <AdminSupportPage
-            support={adminChat}
             currentUserId={user.id}
             onOpenUser={(userId) => navigate({ name: 'admin', userId })}
           />

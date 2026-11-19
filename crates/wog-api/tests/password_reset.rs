@@ -101,6 +101,7 @@ fn test_config() -> DefaultConfig {
         sepay_api_base: String::new(),
         order_ttl_minutes: 30,
         allowed_origins: "https://extra.test, http://localhost:5173".into(),
+        cookie_secure: true,
     }
 }
 

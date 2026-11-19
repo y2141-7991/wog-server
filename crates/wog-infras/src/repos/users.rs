@@ -4,9 +4,10 @@ use sqlx::PgPool;
 
 use crate::{
     errors::DatabaseError,
-    models::{EmailVerificationToken, User},
+    models::{EmailVerificationToken, RefreshOutcome, SessionInfo, User},
     repos::UserRepository,
 };
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct PgUserRepo {
@@ -238,7 +239,170 @@ impl UserRepository for PgUserRepo {
             .execute(&mut *tx)
             .await?;
 
+        // Signed out everywhere: no refresh token of this account works any more.
+        sqlx::query(
+            "UPDATE refresh_sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL",
+        )
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+
         tx.commit().await?;
         Ok(Some(user))
+    }
+    async fn create_session(
+        &self,
+        id: Uuid,
+        user_id: Uuid,
+        jti: Uuid,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), DatabaseError> {
+        sqlx::query(
+            "INSERT INTO refresh_sessions (id, user_id, current_jti, expires_at) VALUES ($1, $2, $3, $4)",
+        )
+        .bind(id)
+        .bind(user_id)
+        .bind(jti)
+        .bind(expires_at)
+        .execute(&self.pg_pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn rotate_session(
+        &self,
+        id: Uuid,
+        jti: Uuid,
+        new_jti: Uuid,
+        new_expires_at: DateTime<Utc>,
+        grace_seconds: i64,
+    ) -> Result<RefreshOutcome, DatabaseError> {
+        let mut tx = self.pg_pool.begin().await?;
+
+        // The row lock serialises concurrent refreshes of one session: the second one
+        // waits, then sees the token the first one already spent.
+        let row: Option<(Uuid, Uuid, Option<Uuid>, bool, bool)> = sqlx::query_as(
+            r#"
+                SELECT user_id,
+                       current_jti,
+                       previous_jti,
+                       (revoked_at IS NOT NULL OR expires_at <= NOW()) AS dead,
+                       COALESCE(rotated_at > NOW() - make_interval(secs => $2::float8), FALSE) AS fresh
+                FROM refresh_sessions
+                WHERE id = $1
+                FOR UPDATE
+            "#,
+        )
+        .bind(id)
+        .bind(grace_seconds as f64)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let Some((user_id, current, previous, dead, within_grace)) = row else {
+            return Ok(RefreshOutcome::Invalid);
+        };
+        if dead {
+            return Ok(RefreshOutcome::Invalid);
+        }
+
+        let outcome = if current == jti {
+            sqlx::query(
+                r#"
+                    UPDATE refresh_sessions
+                    SET previous_jti = current_jti,
+                        current_jti = $2,
+                        rotated_at = NOW(),
+                        last_used_at = NOW(),
+                        expires_at = $3
+                    WHERE id = $1
+                "#,
+            )
+            .bind(id)
+            .bind(new_jti)
+            .bind(new_expires_at)
+            .execute(&mut *tx)
+            .await?;
+            RefreshOutcome::Rotated(user_id)
+        } else if previous == Some(jti) && within_grace {
+            RefreshOutcome::Replayed(user_id)
+        } else {
+            // A token that was already spent, outside the race window (or one this
+            // session never issued): treat the whole sign-in as compromised.
+            sqlx::query("UPDATE refresh_sessions SET revoked_at = NOW() WHERE id = $1")
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+            RefreshOutcome::Reused
+        };
+
+        tx.commit().await?;
+        Ok(outcome)
+    }
+
+    async fn revoke_session(&self, id: Uuid) -> Result<(), DatabaseError> {
+        sqlx::query(
+            "UPDATE refresh_sessions SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL",
+        )
+        .bind(id)
+        .execute(&self.pg_pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn find_live_session(&self, id: Uuid) -> Result<Option<SessionInfo>, DatabaseError> {
+        Ok(sqlx::query_as::<_, SessionInfo>(
+            r#"
+                SELECT id, user_id, created_at, expires_at
+                FROM refresh_sessions
+                WHERE id = $1 AND revoked_at IS NULL AND expires_at > NOW()
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pg_pool)
+        .await?)
+    }
+
+    async fn create_auth_code(
+        &self,
+        code_hash: &str,
+        kind: &str,
+        user_id: Uuid,
+        session_id: Option<Uuid>,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), DatabaseError> {
+        // Codes live for seconds; sweep the dead ones whenever a new one is made.
+        sqlx::query("DELETE FROM auth_codes WHERE expires_at < NOW()")
+            .execute(&self.pg_pool)
+            .await?;
+        sqlx::query(
+            "INSERT INTO auth_codes (code_hash, kind, user_id, session_id, expires_at) VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(code_hash)
+        .bind(kind)
+        .bind(user_id)
+        .bind(session_id)
+        .bind(expires_at)
+        .execute(&self.pg_pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn redeem_auth_code(
+        &self,
+        code_hash: &str,
+        kind: &str,
+    ) -> Result<Option<(Uuid, Option<Uuid>)>, DatabaseError> {
+        // Deleting is spending: one statement, so two requests cannot both get it.
+        Ok(sqlx::query_as(
+            r#"
+                DELETE FROM auth_codes
+                WHERE code_hash = $1 AND kind = $2 AND expires_at > NOW()
+                RETURNING user_id, session_id
+            "#,
+        )
+        .bind(code_hash)
+        .bind(kind)
+        .fetch_optional(&self.pg_pool)
+        .await?)
     }
 }

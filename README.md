@@ -30,6 +30,9 @@ JWT_SECRET=
 REFRESH_TOKEN_SECRET=
 ACCESS_TOKEN_EXPIRE_MINUTES=15
 REFRESH_TOKEN_EXPIRE_MINUTES=10080
+# Refresh cookie is Secure (https only). Set to false only for plain-http local
+# development in a browser that refuses Secure cookies there (Safari).
+# COOKIE_SECURE=true
 
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
@@ -75,9 +78,7 @@ npm run dev
 
 The API runs on `http://localhost:3000` and the client on `http://localhost:5173`. The Vite dev server proxies `/api/*` and `/gateway/*` to the backend.
 
-> Subscriptions and payments live in their own migration, `0003_subscriptions.sql` (idempotent, applies cleanly on a fresh database or on one already at `0002`), so they do not require recreating the database.
->
-> The schema and the API catalog are seeded by `0001_init.sql`. While there is no deployed database, that file is edited in place; after pulling a change to it, drop and recreate the dev database. SQLx refuses to start on a database that was migrated with an earlier version of the file.
+> The whole schema and the seed data (API catalog, plans) live in a single migration, `0001_init.sql`. While there is no deployed database, that file is edited in place; after pulling a change to it, drop and recreate the dev database. SQLx refuses to start on a database that was migrated with an earlier version of the file.
 
 ## API Docs
 
@@ -266,7 +267,7 @@ Customers talk to admins through a chat bubble (bottom-right, signed-in non-admi
 | `CLIENT_URL`, `REST_API_URL` | Always allowed as WebSocket origins. |
 | `ALLOWED_ORIGINS` | Extra allowed browser origins, comma separated, e.g. `http://localhost:5173,https://admin.example.com`. Empty by default. |
 
-**Auth and origin.** The socket is authenticated by the same HttpOnly `token` cookie as every other route, so no token ever appears in a URL or a log (a ticket endpoint would add a moving part for no gain: the cookie is already sent on the same-origin handshake). `Authorization: Bearer <access token>` also works for non-browser clients. The handshake answers `401` without a valid session, `403` for an unverified account, a pending password change, or an `Origin` that is not allowed (cross-site WebSocket hijacking). Beyond the connection cap the upgrade succeeds, the server sends an `error` event with code `too_many_connections` and closes the socket. A missing `Origin` is allowed because only browsers always send it. Roles are read from the database, never from the token: admin-only events and every admin send are re-checked, and a demoted admin is disconnected within 30 seconds. The server closes a socket when its access token expires, and the client reconnects.
+**Auth and origin.** A browser cannot set an `Authorization` header on a WebSocket, so the page first calls `POST /api/v1/support/ticket` (an ordinary Bearer call) and gets a single-use ticket that works for 30 seconds, then opens `/api/v1/support/ws?ticket=…`. No access token ever appears in a URL or a log, and every reconnect asks for a fresh ticket. `Authorization: Bearer <access token>` on the handshake also works for non-browser clients. The handshake answers `401` without a valid ticket or session, `403` for an unverified account, a pending password change, or an `Origin` that is not allowed (cross-site WebSocket hijacking). Beyond the connection cap the upgrade succeeds, the server sends an `error` event with code `too_many_connections` and closes the socket. A missing `Origin` is allowed because only browsers always send it. Roles are read from the database, never from the token: admin-only events and every admin send are re-checked, and a demoted admin is disconnected within 30 seconds. A socket ends when its sign-in does: at the next 30-second heartbeat after a logout or password reset, or when the session expires; the client then reconnects (and signs out if its session is gone).
 
 **Limits**
 
@@ -336,6 +337,34 @@ In terminal 2 type a message. The admin terminal prints a `conversation_updated`
 
 **Tests.** `cargo test -p wog-api --test support_chat` starts the real server per test on an ephemeral port with its own database (`DATABASE_URL` must point at a Postgres where you can create databases).
 
+## Sign-in sessions (Bearer tokens)
+
+The browser authenticates with `Authorization: Bearer <access token>`. **No cookie carries the access token**, so a request another site makes on the browser's behalf has nothing to ride on.
+
+| | Where it lives | Lifetime |
+|---|---|---|
+| **Access token** (JWT, HS256) | The page's memory only. Not in a cookie, not in `localStorage`; a reload forgets it. | `ACCESS_TOKEN_EXPIRE_MINUTES` (15) |
+| **Refresh token** (JWT, HS512) | One `HttpOnly` cookie: `Path=/api/v1/auth` (sent only to refresh and logout), `SameSite=Strict`, `Secure` (see `COOKIE_SECURE`). Scripts cannot read it. | `REFRESH_TOKEN_EXPIRE_MINUTES` (7 days, sliding) |
+
+- **Silent refresh.** On a `401` the client calls `POST /api/v1/auth/refresh` once (calls that fail together share one refresh), then retries. A reload does the same to get its first access token. If the refresh fails the user is signed out.
+- **Rotation.** Each sign-in is a row in `refresh_sessions`; a refresh token carries a session id (`sid`) and its own id (`jti`). Using the current token spends it and returns the next one (new cookie). Only the latest works.
+- **Replay detection.** A spent token that comes back **after 10 seconds** means someone copied it: the whole session is revoked, so the copy and the real holder are both signed out. Inside the 10 seconds it is treated as two tabs racing (they share one cookie): the second tab gets an access token and no new refresh token.
+- **Logout** revokes the session behind the cookie, so a copy of the token is dead too. Other devices stay signed in. A password reset revokes all sessions.
+- **Access tokens are stateless.** After a logout an already-issued access token keeps working until it expires (at most 15 minutes) on ordinary routes. The chat socket ends at its next heartbeat.
+- **Cookie endpoints check `Origin`.** `refresh`, `logout` and `oauth/exchange` answer `403` when a browser sends an `Origin` that is not `CLIENT_URL`, `REST_API_URL` or `ALLOWED_ORIGINS`. Requests without one (curl, tests) are allowed.
+- **Google sign-in.** The callback does not put tokens in the redirect. It sends the browser to `/?code=…`, a single-use code valid for 60 seconds (only its SHA-256 is stored in `auth_codes`); the page removes it from the address bar and swaps it at `POST /api/v1/auth/oauth/exchange` for a session.
+- **Chat socket.** See "Support chat": a 30-second single-use ticket instead of a token in the URL.
+- **Upgrading.** Refresh tokens issued before this change carry no session and are rejected once, so everyone signs in again. The old site-wide `token`, `refresh_token`, `lang` and `timestamp` cookies are expired on the next sign-in.
+- **Still open:** login, register and refresh responses include `refresh_token` in the JSON body next to the cookie (non-browser clients and tests use it). Scripts in the page could read that copy from a response they trigger; dropping it from the body for browsers would close that. Sessions are not listed anywhere yet ("sign out this device"), and `change-password` does not end other sessions.
+
+| Endpoint | Auth | Notes |
+|---|---|---|
+| `POST /api/v1/auth/login`, `/register` | none | Body: `user`, `access_token` (and `refresh_token`); sets the refresh cookie |
+| `POST /api/v1/auth/refresh` | refresh cookie | New `access_token`; rotates the cookie |
+| `POST /api/v1/auth/logout` | refresh cookie | Revokes the session, clears the cookie |
+| `POST /api/v1/auth/oauth/exchange` | one-time code | `{ "code" }` from the Google redirect; same body as login |
+| `POST /api/v1/support/ticket` | Bearer | `{ "ticket", "expires_in" }` for the chat socket |
+
 ## Forgot password
 
 On the sign-in page, **Forgot your password?** opens `/forgot-password`. The user enters their email and, if an account with a password exists for it, receives a link to `/reset-password`.
@@ -345,7 +374,7 @@ On the sign-in page, **Forgot your password?** opens `/forgot-password`. The use
 - **The link.** 64 hex characters of randomness, valid for **30 minutes**, **single use**. Only its SHA-256 is stored (`password_reset_tokens.token_hash`), so a database leak does not leak working links. The page removes the token from the address bar as soon as it loads.
 - **Throttling.** One link per account per 60 seconds and at most 5 per hour, on top of the server-wide rate limit. Requests over the limit still answer `200` and send nothing.
 - **Resetting.** `POST /api/v1/auth/reset-password` with `{ "token", "new_password" }` (at least 8 characters). Spending the link and changing the password happen in one transaction, so two simultaneous requests cannot both succeed; the account's other open links are cancelled; the forced-password-change flag (default admin) is cleared. A wrong, expired or used link answers `400` with one generic message. A too-short password is rejected *before* the link is used, so the user can retry. The owner also gets a "your password was changed" email.
-- **Signed out everywhere.** A reset stamps `users.password_changed_at`. From then on, an access or refresh token issued before that moment is rejected with `401` on every route and the chat WebSocket (open sockets are closed within 30 seconds, at the next heartbeat). Tokens carry whole seconds, so a token issued in the same second as the reset can survive it; accounts that never reset have no cutoff, so the migration does not sign anyone out. Because of this, every authenticated request now reads the account row (it already did for admin and chat routes).
+- **Signed out everywhere.** A reset revokes every refresh session of the account and stamps `users.password_changed_at`. From then on no refresh token works, an access token issued before that moment is rejected with `401` on every route and the chat WebSocket (open sockets are closed within 30 seconds, at the next heartbeat). Access tokens carry whole seconds, so one issued in the same second as the reset can survive it; accounts that never reset have no cutoff, so the migration does not sign anyone out. Because of this, every authenticated request reads the account row (it already did for admin and chat routes).
 - **Not done:** changing your password while signed in (`/auth/change-password`) does not sign other sessions out, and Google-only accounts cannot set a password through this flow.
 
 | Endpoint | Auth | Notes |
@@ -364,6 +393,32 @@ psql "$DATABASE_URL" -c "INSERT INTO password_reset_tokens (user_id, token_hash,
 ```
 
 Tests: `cargo test -p wog-api --test password_reset` (needs `DATABASE_URL`, like the other integration tests).
+
+## Docker
+
+Two images: the server (`Dockerfile`) and the web client (`client/Dockerfile`, built
+by Vite and served by nginx, which also proxies `/api` and `/gateway` to the server so
+the app and the API share one origin).
+
+```bash
+docker compose up --build        # server on :3000, client on :8080
+```
+
+- The database is not part of the compose file: `DATABASE_URL` in `.env` must be
+  reachable *from the container* (`localhost` there is the container itself; use
+  `host.docker.internal` on Docker Desktop, or a database service name).
+- `docker-compose.yml` forces `SERVER_HOST=0.0.0.0` inside the container, so the
+  `127.0.0.1` in a local `.env` does not matter.
+- Set `CLIENT_URL` and `REST_API_URL` in `.env` to the address the browser uses
+  (`http://localhost:8080` here). Sign-in, refresh and the chat socket check the
+  request's Origin against them.
+- The nginx in the client image sets `X-Forwarded-For` to the connecting address,
+  which the server's rate limiter keys on. Behind another proxy or a Cloudflare
+  tunnel set the client container's `CLIENT_IP` to the real client address variable
+  (`$http_cf_connecting_ip` for Cloudflare).
+- To host the client elsewhere (Vercel, a CDN) build it with
+  `--build-arg VITE_API_URL=https://your-api` instead of using the nginx proxy.
+- Migrations run on server start (they are embedded in the binary).
 
 ## Crawler (`social-track-pipeline`)
 

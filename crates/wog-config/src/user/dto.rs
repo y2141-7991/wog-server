@@ -35,6 +35,11 @@ pub struct ResetPasswordRequest {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
+pub struct ExchangeCodeRequest {
+    pub code: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct VerifyEmailRequest {
     pub token: String,
 }

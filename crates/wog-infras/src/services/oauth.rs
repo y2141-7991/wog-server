@@ -63,9 +63,7 @@ impl OAuthServices {
             .await
             .map_err(|e| {
                 warn!(email = %email, error = %e, "Failed to create OAuth user");
-                DatabaseError::ExistedDataError(
-                    format!("Username or email already exists: {}", e).into(),
-                )
+                DatabaseError::ExistedDataError(format!("Username or email already exists: {}", e))
             })
     }
     pub async fn callback(&self, code: String, csrf: String) -> Result<User, DatabaseError> {

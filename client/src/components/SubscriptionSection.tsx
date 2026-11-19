@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
-import { createOrder, fetchOrder, fetchOrders, fetchPlans, fetchSubscription } from '../api/billing'
+import { useCallback, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { invalidateBilling, resumeOrder, useCreateOrder, useOrders, usePlans, useSubscription } from '../api/queries'
 import { formatVnd } from '../lib/format'
 import type { Order, OrderPayment, Plan, Subscription } from '../types'
 import { PaymentModal } from './PaymentModal'
@@ -35,35 +36,30 @@ function buttonFor(plan: Plan, subscription: Subscription | null, plans: Plan[])
 }
 
 export function SubscriptionSection() {
-  const [plans, setPlans] = useState<Plan[] | null>(null)
-  const [subscription, setSubscription] = useState<Subscription | null>(null)
-  const [orders, setOrders] = useState<Order[] | null>(null)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+  const plansQuery = usePlans()
+  const subscriptionQuery = useSubscription()
+  const ordersQuery = useOrders()
+  const createOrder = useCreateOrder()
+  const plans = plansQuery.data ?? null
+  const subscription = subscriptionQuery.data ?? null
+  const orders = ordersQuery.data ?? null
+  const failed = plansQuery.error ?? subscriptionQuery.error ?? ordersQuery.error
+  const loadError = failed ? failed.message || 'Could not load billing' : null
   const [actionError, setActionError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [payment, setPayment] = useState<OrderPayment | null>(null)
 
-  const refresh = useCallback(async () => {
-    const [p, s, o] = await Promise.all([fetchPlans(), fetchSubscription(), fetchOrders()])
-    setPlans(p)
-    setSubscription(s)
-    setOrders(o)
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    refresh().catch((e) => !cancelled && setLoadError(e instanceof Error ? e.message : 'Could not load billing'))
-    return () => {
-      cancelled = true
-    }
-  }, [refresh])
+  // Plan, orders and quota all move together; the navbar badge and dashboard share them.
+  const refreshQuietly = useCallback(() => {
+    void invalidateBilling(queryClient)
+  }, [queryClient])
 
   async function pay(slug: Plan['slug']) {
     setBusy(slug)
     setActionError(null)
     try {
-      setPayment(await createOrder(slug))
-      void refresh().catch(() => undefined)
+      setPayment(await createOrder.mutateAsync(slug))
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Could not start the payment')
     } finally {
@@ -74,7 +70,7 @@ export function SubscriptionSection() {
   async function resume(id: string) {
     setActionError(null)
     try {
-      setPayment(await fetchOrder(id))
+      setPayment(await resumeOrder(id))
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Could not open this order')
     }
@@ -82,12 +78,8 @@ export function SubscriptionSection() {
 
   const closeModal = useCallback(() => {
     setPayment(null)
-    void refresh().catch(() => undefined)
-  }, [refresh])
-
-  const refreshQuietly = useCallback(() => {
-    void refresh().catch(() => undefined)
-  }, [refresh])
+    refreshQuietly()
+  }, [refreshQuietly])
 
   if (loadError) {
     return (

@@ -5,9 +5,9 @@ use axum::{
     http::{StatusCode, request::Parts},
     response::{IntoResponse, Response},
 };
-use axum_extra::extract::CookieJar;
 use jsonwebtoken::{DecodingKey, Validation, decode};
 use serde_json::json;
+use uuid::Uuid;
 use wog_infras::{
     AppConfig, Claims, TokenType,
     email::EmailService,
@@ -47,6 +47,8 @@ pub struct VerifiedUser {
     pub token_exp: usize,
     /// When the token was issued (seconds), for `session_is_current`.
     pub token_iat: usize,
+    /// The sign-in the token belongs to, for ending a socket when it is logged out.
+    pub sid: Option<Uuid>,
 }
 
 #[derive(Debug)]
@@ -104,6 +106,7 @@ impl FromRequestParts<AppState> for VerifiedUser {
             user,
             token_exp: claims.exp,
             token_iat: claims.iat,
+            sid: claims.sid,
         })
     }
 }
@@ -160,23 +163,19 @@ pub fn session_is_current(user: &User, token_iat: usize) -> bool {
     }
 }
 
+/// The access token comes from `Authorization: Bearer <token>` and nowhere else:
+/// no cookie carries it, so a request another site makes on the browser's behalf
+/// has nothing to ride on.
 fn decode_access_token(parts: &Parts, state: &AppState) -> Result<Claims, AuthError> {
     let token = parts
         .headers
         .get("Authorization")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
-        .map(|t| t.to_string());
-
-    let token = match token {
-        Some(t) => t,
-        None => {
-            let jar = CookieJar::from_headers(&parts.headers);
-            jar.get("token")
-                .map(|c| c.value().to_string())
-                .ok_or_else(|| AuthError("Missing authentication token".into()))?
-        }
-    };
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .ok_or_else(|| AuthError("Missing authentication token".into()))?
+        .to_string();
 
     let secret = &state.app_config.default_config.jwt_secret;
     let token_data = decode::<Claims>(

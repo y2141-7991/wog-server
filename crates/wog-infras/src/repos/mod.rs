@@ -11,7 +11,8 @@ use crate::{
     models::{
         ActiveSubscription, AdminApiUsage, AdminTotals, AdminUserUsage, Api, ApiKey, ApiUsageByApi,
         ApiUsageByDay, AuditLogEntry, EmailVerificationToken, PaymentEvent, PaymentOrder, Plan,
-        PostedMessage, SettleOutcome, SupportConversationRow, SupportMessage, User,
+        PostedMessage, RefreshOutcome, SessionInfo, SettleOutcome, SupportConversationRow,
+        SupportMessage, User,
     },
     repos::oauth::OAuthConnection,
 };
@@ -91,6 +92,58 @@ pub trait UserRepository {
         token_hash: &str,
         new_hash_pwd: &str,
     ) -> Result<Option<User>, DatabaseError>;
+
+    // ───────── Refresh sessions ─────────
+
+    /// Record a new sign-in whose first refresh token has id `jti`.
+    async fn create_session(
+        &self,
+        id: Uuid,
+        user_id: Uuid,
+        jti: Uuid,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), DatabaseError>;
+
+    /// Present refresh token `jti` of session `id`. Done under a row lock, so two
+    /// requests with the same token cannot both rotate it:
+    /// the current token is spent and `new_jti` becomes current (`Rotated`); the
+    /// previous one inside `grace_seconds` of that rotation is a harmless race
+    /// (`Replayed`); anything else for a live session is a replay of a copied token and
+    /// revokes the session (`Reused`).
+    async fn rotate_session(
+        &self,
+        id: Uuid,
+        jti: Uuid,
+        new_jti: Uuid,
+        new_expires_at: DateTime<Utc>,
+        grace_seconds: i64,
+    ) -> Result<RefreshOutcome, DatabaseError>;
+
+    /// End one sign-in (logout). Idempotent.
+    async fn revoke_session(&self, id: Uuid) -> Result<(), DatabaseError>;
+
+    /// The session, if it is still live.
+    async fn find_live_session(&self, id: Uuid) -> Result<Option<SessionInfo>, DatabaseError>;
+
+    // ───────── One-time codes ─────────
+
+    /// Store a single-use code (by its hash) of `kind`, valid until `expires_at`.
+    /// Expired codes are swept on the way.
+    async fn create_auth_code(
+        &self,
+        code_hash: &str,
+        kind: &str,
+        user_id: Uuid,
+        session_id: Option<Uuid>,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), DatabaseError>;
+
+    /// Spend a code: `Some((user, session))` exactly once, while unexpired.
+    async fn redeem_auth_code(
+        &self,
+        code_hash: &str,
+        kind: &str,
+    ) -> Result<Option<(Uuid, Option<Uuid>)>, DatabaseError>;
 }
 
 #[async_trait]

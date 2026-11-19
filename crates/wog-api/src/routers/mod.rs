@@ -6,8 +6,8 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use wog_middleware::AppState;
 
 use crate::routers::oauth::{
-    auth_me, change_password, forgot_password, google_callback, google_login, login, logout,
-    refresh_token, register, resend_verification, reset_password, verify_email,
+    auth_me, change_password, exchange_code, forgot_password, google_callback, google_login, login,
+    logout, refresh_token, register, resend_verification, reset_password, verify_email,
 };
 
 pub mod admin;
@@ -25,6 +25,7 @@ pub fn oauth_routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/auth/oauth/google", get(google_login))
         .route("/api/v1/auth/oauth/google/callback", get(google_callback))
+        .route("/api/v1/auth/oauth/exchange", post(exchange_code))
         .route("/api/v1/auth/register", post(register))
         .route("/api/v1/auth/login", post(login))
         .route("/api/v1/auth/verify-email", post(verify_email))
@@ -72,7 +73,9 @@ pub fn billing_routes() -> OpenApiRouter<AppState> {
 /// The chat socket. A plain route: it is a protocol upgrade, not a JSON API,
 /// so it is not part of the OpenAPI document.
 pub fn support_ws_routes() -> Router<AppState> {
-    Router::new().route("/api/v1/support/ws", get(support::support_ws))
+    Router::new()
+        .route("/api/v1/support/ws", get(support::support_ws))
+        .route("/api/v1/support/ticket", post(support::create_ws_ticket))
 }
 
 pub fn support_routes() -> OpenApiRouter<AppState> {

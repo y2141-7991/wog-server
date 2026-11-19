@@ -106,6 +106,7 @@ fn test_config() -> DefaultConfig {
         sepay_api_base: String::new(),
         order_ttl_minutes: 30,
         allowed_origins: "https://extra.test, http://localhost:5173".into(),
+        cookie_secure: true,
     }
 }
 
@@ -194,8 +195,9 @@ impl Harness {
         let user = self.state.user_services.get_user(id).await.unwrap();
         let token = self
             .state
-            .app_config
-            .generate_token_pair(&user)
+            .user_services
+            .start_session(&self.state.app_config, &user)
+            .await
             .unwrap()
             .access_token;
         Account { id, token }
@@ -215,8 +217,8 @@ impl Harness {
             .unwrap();
         if let Some(t) = token {
             req.headers_mut().insert(
-                "Cookie",
-                HeaderValue::from_str(&format!("token={t}")).unwrap(),
+                "Authorization",
+                HeaderValue::from_str(&format!("Bearer {t}")).unwrap(),
             );
         }
         if let Some(o) = origin {
@@ -226,10 +228,33 @@ impl Harness {
         req
     }
 
-    /// Connect as `account` the way a browser would (cookie + allowed Origin)
+    /// A handshake the way a browser makes it: the single-use ticket in the query
+    /// string, plus an `Origin`.
+    fn ticket_request(&self, ticket: &str, origin: Option<&str>) -> tungstenite::http::Request<()> {
+        let mut req = format!("ws://{}/api/v1/support/ws?ticket={ticket}", self.addr)
+            .into_client_request()
+            .unwrap();
+        if let Some(o) = origin {
+            req.headers_mut()
+                .insert("Origin", HeaderValue::from_str(o).unwrap());
+        }
+        req
+    }
+
+    /// Ask for a ticket as `account` (a Bearer call, like the page makes).
+    async fn ticket(&self, account: &Account) -> String {
+        let (status, body) = self
+            .rest("POST", "/api/v1/support/ticket", Some(account))
+            .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        body["ticket"].as_str().unwrap().to_string()
+    }
+
+    /// Connect as `account` the way a browser would (ticket + allowed Origin)
     /// and consume the `ready` frame.
     async fn connect(&self, account: &Account) -> Ws {
-        let (sock, _) = connect_async(self.request(Some(&account.token), Some(ORIGIN)))
+        let ticket = self.ticket(account).await;
+        let (sock, _) = connect_async(self.ticket_request(&ticket, Some(ORIGIN)))
             .await
             .expect("upgrade");
         let mut ws = Ws { sock };
@@ -402,7 +427,7 @@ async fn upgrade_needs_auth_and_an_allowed_origin(pool: PgPool) {
         status(connect_async(h.request(Some("not-a-jwt"), Some(ORIGIN))).await),
         401
     );
-    // Valid cookie from a foreign site (cross-site WebSocket hijacking).
+    // A valid credential from a foreign site (cross-site WebSocket hijacking).
     assert_eq!(
         status(connect_async(h.request(Some(&user.token), Some("https://evil.test"))).await),
         403
@@ -442,6 +467,90 @@ async fn upgrade_refuses_unverified_users(pool: PgPool) {
         Err(tungstenite::Error::Http(r)) => assert_eq!(r.status().as_u16(), 403),
         other => panic!("expected 403, got {:?}", other.map(|_| ())),
     }
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn a_ticket_opens_one_socket_and_only_once(pool: PgPool) {
+    let h = harness(pool).await;
+    let user = h.user().await;
+    let status = |r: Result<_, tungstenite::Error>| match r {
+        Err(tungstenite::Error::Http(res)) => res.status().as_u16(),
+        Ok(_) => 101,
+        Err(e) => panic!("unexpected: {e}"),
+    };
+
+    let ticket = h.ticket(&user).await;
+    assert_eq!(
+        status(connect_async(h.ticket_request(&ticket, Some(ORIGIN))).await),
+        101
+    );
+    // Spent: the same ticket again, a made-up one and an empty one all fail.
+    assert_eq!(
+        status(connect_async(h.ticket_request(&ticket, Some(ORIGIN))).await),
+        401
+    );
+    assert_eq!(
+        status(connect_async(h.ticket_request("deadbeef", Some(ORIGIN))).await),
+        401
+    );
+    // A valid ticket from a foreign site is still refused, and is not spent by that.
+    let ticket = h.ticket(&user).await;
+    assert_eq!(
+        status(connect_async(h.ticket_request(&ticket, Some("https://evil.test"))).await),
+        403
+    );
+    assert_eq!(
+        status(connect_async(h.ticket_request(&ticket, Some(ORIGIN))).await),
+        101
+    );
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn tickets_need_a_signed_in_verified_user_and_a_live_session(pool: PgPool) {
+    let h = harness(pool).await;
+    let status = |r: Result<_, tungstenite::Error>| match r {
+        Err(tungstenite::Error::Http(res)) => res.status().as_u16(),
+        Ok(_) => 101,
+        Err(e) => panic!("unexpected: {e}"),
+    };
+
+    // No Bearer token, no ticket.
+    assert_eq!(
+        h.rest("POST", "/api/v1/support/ticket", None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    // Unverified accounts cannot chat, so they cannot get a ticket either.
+    let unverified = h.account("user", false).await;
+    assert_eq!(
+        h.rest("POST", "/api/v1/support/ticket", Some(&unverified))
+            .await
+            .0,
+        StatusCode::FORBIDDEN
+    );
+
+    // A ticket outlives nothing: past its 30 seconds it is dead...
+    let user = h.user().await;
+    let ticket = h.ticket(&user).await;
+    sqlx::query("UPDATE auth_codes SET expires_at = NOW() - INTERVAL '1 second'")
+        .execute(&h.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        status(connect_async(h.ticket_request(&ticket, Some(ORIGIN))).await),
+        401
+    );
+
+    // ...and so is one whose sign-in was ended (logout) after it was minted.
+    let ticket = h.ticket(&user).await;
+    sqlx::query("UPDATE refresh_sessions SET revoked_at = NOW() WHERE user_id = $1")
+        .bind(user.id)
+        .execute(&h.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        status(connect_async(h.ticket_request(&ticket, Some(ORIGIN))).await),
+        401
+    );
 }
 
 // ───────────────────────── messaging ─────────────────────────

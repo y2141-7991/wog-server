@@ -4,12 +4,13 @@ import type {
   SupportMessagesPage,
   SupportUserView,
 } from '../types'
+import { apiFetch } from './http'
 
 const API = import.meta.env.VITE_API_URL || ''
 const BASE = `${API}/api/v1/support`
 
 async function request<T>(path: string, init: RequestInit, failure: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { credentials: 'include', ...init })
+  const res = await apiFetch(`${BASE}${path}`, init)
   const body = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(body.message || failure)
   return body as T
@@ -58,11 +59,14 @@ export const reopenConversation = (id: string) =>
   request<SupportConversation>(`/conversations/${id}/reopen`, { method: 'POST' }, 'Could not reopen the conversation')
 
 /**
- * The chat socket's URL. The session cookie authenticates it (browsers cannot
- * set headers on a WebSocket), so no token is ever put in the URL.
+ * The chat socket's URL. A browser cannot set an Authorization header on a WebSocket,
+ * so a Bearer call first buys a single-use ticket (good for 30 seconds) and the URL
+ * carries that, never the access token. Every connection, including each reconnect,
+ * needs its own ticket.
  */
-export function supportSocketUrl(): string {
+export async function supportSocketUrl(): Promise<string> {
+  const { ticket } = await request<{ ticket: string }>('/ticket', { method: 'POST' }, 'Could not open the chat')
   const base = API ? new URL(API, window.location.href) : new URL(window.location.href)
   const scheme = base.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${scheme}//${base.host}/api/v1/support/ws`
+  return `${scheme}//${base.host}/api/v1/support/ws?ticket=${encodeURIComponent(ticket)}`
 }

@@ -4,12 +4,13 @@ import type {
   MarketplaceApi,
   UsageResponse,
 } from '../types'
+import { apiFetch } from './http'
 
 const API = import.meta.env.VITE_API_URL || ''
 const BASE = `${API}/api/v1/marketplace`
 
 async function request<T>(path: string, init: RequestInit, failure: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { credentials: 'include', ...init })
+  const res = await apiFetch(`${BASE}${path}`, init)
   if (res.status === 204) return undefined as T
   const body = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(body.message || failure)

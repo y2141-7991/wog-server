@@ -1,0 +1,75 @@
+# Rendered by the nginx image's entrypoint: ${BACKEND_URL} and ${CLIENT_IP} are
+# substituted, nginx's own $variables are left alone (only variables set in the
+# environment are replaced).
+#
+# CLIENT_IP is the nginx variable holding the real client address, which the server
+# rate-limits on. Default $remote_addr (direct access). Behind a Cloudflare tunnel use
+# $http_cf_connecting_ip; the header is only trustworthy when nginx cannot be reached
+# except through Cloudflare, otherwise a client could choose its own address.
+
+# Upgrade the connection only when the client asked for it (support chat WebSocket).
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
+    # Same-origin API: the browser talks only to this host, so the refresh cookie
+    # (SameSite=Strict, Path=/api/v1/auth) and the Origin checks work unchanged.
+    location /api/ {
+        proxy_pass ${BACKEND_URL};
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        # The server rate-limits on the first X-Forwarded-For entry. Overwrite it
+        # (do not append) so a client cannot choose its own address.
+        proxy_set_header X-Forwarded-For   ${CLIENT_IP};
+        proxy_set_header X-Real-IP         ${CLIENT_IP};
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket (/api/v1/support/ws).
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        # An idle chat socket is pinged by the server every 30 s; keep it open longer.
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+    }
+
+    # Public gateway endpoints shown on the API pages.
+    location /gateway/ {
+        proxy_pass ${BACKEND_URL};
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-For   ${CLIENT_IP};
+        proxy_set_header X-Real-IP         ${CLIENT_IP};
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Vite output is content-hashed: cache it for a year.
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    # index.html names the current hashed files, so it must always be re-fetched.
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+    }
+
+    # Single-page app: unknown paths are client-side routes.
+    location / {
+        add_header Cache-Control "no-cache";
+        try_files $uri $uri/ /index.html;
+    }
+}
