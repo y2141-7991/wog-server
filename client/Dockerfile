@@ -21,7 +21,7 @@ ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
 # ---- Serve -----------------------------------------------------------------
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.29-alpine AS runtime
 
 # Files in /etc/nginx/templates are run through envsubst at start-up and written to
 # /etc/nginx/conf.d, which is how BACKEND_URL gets in.
