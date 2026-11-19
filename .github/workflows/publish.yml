@@ -1,0 +1,102 @@
+name: Publish images
+
+# Builds both images and pushes them to Artifact Registry as :<git-sha>.
+# Release tags (v1.2.3) also get :<tag>. Images are never pushed from PRs.
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false # never cut off a push half way
+
+permissions:
+  contents: read
+  id-token: write # lets GitHub issue the OIDC token Google exchanges for access
+
+# Not secrets: they only name things. Access is controlled by the Workload Identity
+# condition in wog-deployment/gcp-infra/github.tf (this repo, master or tags only).
+env:
+  REGISTRY: asia-southeast1-docker.pkg.dev
+  IMAGE_PREFIX: asia-southeast1-docker.pkg.dev/wog-515215-q9/wog
+  WIF_PROVIDER: projects/373406487218/locations/global/workloadIdentityPools/github/providers/github-oidc
+  SERVICE_ACCOUNT: github-publisher@wog-515215-q9.iam.gserviceaccount.com
+
+jobs:
+  publish:
+    name: Publish ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: server
+            context: .
+          - image: client
+            context: client
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_lifetime: 3600s
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Tags in the registry are immutable, so a re-run for the same commit must not
+      # push again. Skip if :<sha> already exists.
+      - id: exists
+        env:
+          IMAGE: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ github.sha }}
+        run: |
+          if docker buildx imagetools inspect "$IMAGE" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$IMAGE already published, skipping build"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - id: meta
+        if: steps.exists.outputs.skip != 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
+          tags: |
+            type=sha,format=long,prefix=
+            type=ref,event=tag
+
+      - if: steps.exists.outputs.skip != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          platforms: linux/amd64 # GKE Autopilot nodes are x86
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Plain single-platform image: no attestation index whose untagged children
+          # the registry cleanup policy could delete.
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+
+      - name: Summary
+        run: |
+          echo "### ${{ matrix.image }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '`${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ github.sha }}`' >> "$GITHUB_STEP_SUMMARY"

@@ -4305,6 +4305,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+ "uuid",
  "wog-infras",
  "wog-oauth",
 ]
