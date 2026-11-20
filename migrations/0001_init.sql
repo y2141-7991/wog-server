@@ -127,7 +127,7 @@ CREATE INDEX IF NOT EXISTS idx_api_usage_user_time ON api_usage(user_id, created
 CREATE INDEX IF NOT EXISTS idx_api_usage_quota     ON api_usage(user_id, api_id, created_at);
 
 -- ══════════════════════════════════════════════════════════════
--- Catalog seed: the four TikTok crawls the pipeline exposes
+-- Catalog seed: the five TikTok crawls the gateway exposes
 -- ══════════════════════════════════════════════════════════════
 INSERT INTO apis (slug, name, description, provider, category, gateway_path, upstream_method, params, example_response, rate_limit_per_minute, monthly_quota) VALUES
 (
@@ -165,6 +165,18 @@ INSERT INTO apis (slug, name, description, provider, category, gateway_path, ups
   '[{"name":"keyword","type":"string","required":true,"description":"Keyword or #hashtag to search","example":"#CS2"},{"name":"cursor","type":"string","required":false,"description":"Page position: the next_cursor of the previous response (omit for the first page)","example":"10"},{"name":"search_id","type":"string","required":false,"description":"Search session id: the search_id of the previous response (omit for the first page)","example":"20261030143012ABCDEF0123456789AB"}]',
   '{"keyword":"#CS2","posts":[{"id":"7656787492309552405","url":"https://www.tiktok.com/@user/video/7656787492309552405","description":"Caption #CS2","created_at":"2026-06-30T02:00:00+00:00","stats":{"plays":25877,"likes":916,"comments":26,"shares":130},"cover_url":"https://...","author":{"id":"7111953329186292741","username":"user","nickname":"Display Name","followers":40742}}],"next_cursor":"10","has_more":true,"search_id":"20261030143012ABCDEF0123456789AB"}',
   10, 50
+),
+(
+  'tiktok-profile',
+  'TikTok Profile',
+  'Public profile of a TikTok account by username: numeric ID, nickname, bio, follower/following/like counts, verified and private flags, plus its 10 latest videos. The returned user.id is what TikTok Profile Posts takes.',
+  'TikTok',
+  'Social',
+  '/gateway/v1/tiktok/profile',
+  'profile',
+  '[{"name":"username","type":"string","required":true,"description":"TikTok username, with or without @","example":"tiktok"}]',
+  '{"username":"tiktok","user":{"id":"107955","uniqueId":"tiktok","nickname":"TikTok","signature":"Your next discovery is waiting on TikTok.","verified":true,"privateAccount":false,"followerCount":97000000,"followingCount":2,"heartCount":469400000,"avatarThumbUrl":"https://..."},"videos":[{"id":"7647151424366824725","authorUniqueId":"tiktok","desc":"Caption","playCount":772962,"coverUrl":"https://...","privateItem":false}]}',
+  30, 50
 ),
 (
   'tiktok-profile-posts',
