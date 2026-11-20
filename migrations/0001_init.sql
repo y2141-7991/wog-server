@@ -140,7 +140,7 @@ INSERT INTO apis (slug, name, description, provider, category, gateway_path, ups
   'post',
   '[{"name":"post_id","type":"string","required":true,"description":"Numeric TikTok video ID","example":"7656787492309552405"}]',
   '{"id":"7656787492309552405","url":"https://www.tiktok.com/@user/video/7656787492309552405","description":"Caption #tag","created_at":"2026-06-30T02:00:00+00:00","stats":{"plays":25877,"likes":916,"comments":26,"shares":130},"cover_url":"https://...","author":{"id":"7111953329186292741","username":"user","nickname":"Display Name","followers":40742}}',
-  30, 1000
+  30, 50
 ),
 (
   'tiktok-comments',
@@ -152,7 +152,7 @@ INSERT INTO apis (slug, name, description, provider, category, gateway_path, ups
   'comments',
   '[{"name":"post_id","type":"string","required":true,"description":"Numeric TikTok video ID","example":"7656787492309552405"},{"name":"cursor","type":"string","required":false,"description":"Page position: the next_cursor of the previous response (omit for the first page)","example":"20"}]',
   '{"post_id":"7656787492309552405","comments":[{"id":"7656790000000000001","text":"Nice clip","created_at":"2026-06-30T03:10:00+00:00","likes":12,"reply_count":1,"author":{"id":"6800000000000000000","username":"someone","nickname":"Someone"}}],"next_cursor":"20","has_more":true}',
-  10, 300
+  10, 50
 ),
 (
   'tiktok-search',
@@ -164,7 +164,7 @@ INSERT INTO apis (slug, name, description, provider, category, gateway_path, ups
   'search',
   '[{"name":"keyword","type":"string","required":true,"description":"Keyword or #hashtag to search","example":"#CS2"},{"name":"cursor","type":"string","required":false,"description":"Page position: the next_cursor of the previous response (omit for the first page)","example":"10"},{"name":"search_id","type":"string","required":false,"description":"Search session id: the search_id of the previous response (omit for the first page)","example":"20261030143012ABCDEF0123456789AB"}]',
   '{"keyword":"#CS2","posts":[{"id":"7656787492309552405","url":"https://www.tiktok.com/@user/video/7656787492309552405","description":"Caption #CS2","created_at":"2026-06-30T02:00:00+00:00","stats":{"plays":25877,"likes":916,"comments":26,"shares":130},"cover_url":"https://...","author":{"id":"7111953329186292741","username":"user","nickname":"Display Name","followers":40742}}],"next_cursor":"10","has_more":true,"search_id":"20261030143012ABCDEF0123456789AB"}',
-  10, 300
+  10, 50
 ),
 (
   'tiktok-profile-posts',
@@ -176,7 +176,7 @@ INSERT INTO apis (slug, name, description, provider, category, gateway_path, ups
   'profile-posts',
   '[{"name":"user_id","type":"string","required":true,"description":"Numeric TikTok user ID (the author.id of any post)","example":"107955"}]',
   '{"user_id":"107955","posts":[{"id":"7647151424366824725","url":"https://www.tiktok.com/@tiktok/video/7647151424366824725","description":"Caption","created_at":"2026-06-04T10:30:00+00:00","stats":{"plays":772962,"likes":25348,"comments":250,"shares":651},"cover_url":"https://...","author":{"id":"107955","username":"tiktok","nickname":"TikTok","followers":90000000}}]}',
-  10, 300
+  10, 50
 )
 ON CONFLICT (slug) DO NOTHING;
 
