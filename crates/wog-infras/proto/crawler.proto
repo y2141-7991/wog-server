@@ -9,7 +9,7 @@ import "google/protobuf/struct.proto";
 
 service Crawler {
   // Run one crawl by name (`post`, `comments`, `search`, `profile`,
-  // `profile-posts`) and return its normalized JSON result. The caller must
+  // `profile-posts`, `followers`, `following`) and return its normalized JSON result. The caller must
   // send its shared secret in the `x-upstream-secret` metadata header.
   //
   // Status codes: INVALID_ARGUMENT bad params, NOT_FOUND unknown method or
