@@ -1,10 +1,20 @@
 services:
   server:
+    build: .
     image: "wog:latest"
     ports:
       - "3000:3000"
     env_file:
       - .env
+    # `environment` wins over `env_file`: inside the container the server must listen
+    # on 0.0.0.0 whatever .env says for local runs (127.0.0.1).
+    # DATABASE_URL still comes from .env; "localhost" there means this container, so
+    # point it at the database host (host.docker.internal on Docker Desktop, or the
+    # name of a database service).
+    environment:
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: "3000"
+    restart: unless-stopped
     # Everything is read from .env. Paid plans (SePay) need these, see
     # "Subscriptions and payments" in the README; without them the server
     # still runs and billing is switched off:
@@ -20,3 +30,21 @@ services:
     #   SEPAY_API_TOKEN: ${SEPAY_API_TOKEN:-}
     #   SEPAY_PAYMENT_CODE_PREFIX: ${SEPAY_PAYMENT_CODE_PREFIX:-WOG}
     #   ORDER_TTL_MINUTES: ${ORDER_TTL_MINUTES:-30}
+
+  client:
+    build:
+      context: ./client
+      args:
+        # Empty: the app and the API share one origin and nginx proxies /api.
+        VITE_API_URL: ${VITE_API_URL:-}
+    image: "wog-client:latest"
+    ports:
+      - "8080:80"
+    environment:
+      BACKEND_URL: http://server:3000
+    depends_on:
+      - server
+    restart: unless-stopped
+    # CLIENT_URL / REST_API_URL in .env must be the address the browser uses, e.g.
+    # http://localhost:8080 (the server checks the Origin of sign-in, refresh and
+    # chat requests against them).
